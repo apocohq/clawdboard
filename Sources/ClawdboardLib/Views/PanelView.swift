@@ -84,14 +84,21 @@ public struct PanelView: View {
 
             Spacer()
 
-            Button {
-                NSApplication.shared.terminate(nil)
+            Menu {
+                Button("Reinstall Hooks") {
+                    try? HookManager.shared.install()
+                }
+                Divider()
+                Button("Quit Clawdboard") {
+                    NSApplication.shared.terminate(nil)
+                }
             } label: {
-                Image(systemName: "power")
+                Image(systemName: "gearshape")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .menuIndicator(.hidden)
         }
     }
 }

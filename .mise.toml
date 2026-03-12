@@ -1,6 +1,18 @@
 [tools]
 swiftlint = "0.63"
 
+[tasks.build]
+description = "Build the project"
+run = "swift build"
+
+[tasks.run]
+description = "Build and run Clawdboard"
+run = "swift run Clawdboard"
+
+[tasks.test]
+description = "Run tests"
+run = "swift test"
+
 [tasks.format]
 description = "Format Swift files with swift-format"
 run = "swift-format format --in-place --recursive Sources/ Tests/"
@@ -10,6 +22,18 @@ description = "Lint Swift files with swift-format and swiftlint"
 run = """
 swift-format lint --strict --recursive Sources/ Tests/
 swiftlint lint --strict --quiet
+"""
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "swift package clean"
+
+[tasks.setup]
+description = "Install tools and configure git hooks"
+run = """
+mise install
+mise generate git-pre-commit --write
+echo "Done! Tools installed and pre-commit hook configured."
 """
 
 [tasks.pre-commit]

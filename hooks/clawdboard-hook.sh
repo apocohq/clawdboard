@@ -240,7 +240,8 @@ PYEOF
         ;;
 
     UserPromptSubmit)
-        # User sent a message — back to working
+        # User sent a message — back to working, also read transcript for model data
+        TRANSCRIPT_DATA=$(TRANSCRIPT_PATH="$TRANSCRIPT" STATE_FILE_PATH="$STATE_FILE" read_transcript_data)
         if [ -f "$STATE_FILE" ]; then
             python3 << PYEOF
 import json
@@ -248,8 +249,13 @@ import json
 with open("$STATE_FILE") as f:
     state = json.load(f)
 
+transcript_data = json.loads('''$TRANSCRIPT_DATA''') if '''$TRANSCRIPT_DATA''' != '{}' else {}
+
 state["status"] = "working"
 state["updated_at"] = "$NOW"
+for key in ("model", "git_branch", "slug", "cost_usd", "context_pct", "input_tokens", "output_tokens"):
+    if key in transcript_data and transcript_data[key] is not None:
+        state[key] = transcript_data[key]
 
 with open("$STATE_FILE", "w") as f:
     json.dump(state, f, indent=2)

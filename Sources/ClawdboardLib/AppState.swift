@@ -37,23 +37,26 @@ public class AppState {
 
     private func updateSessions(hookSessions: [AgentSession]) {
         let now = Date()
-        sessions = hookSessions.map { session -> AgentSession in
+        sessions = hookSessions.compactMap { session -> AgentSession? in
             var s = session
-            // Debounce: pending_waiting → waiting after 3 seconds
-            if s.status == .pendingWaiting,
-                let updatedAt = s.updatedAt,
-                now.timeIntervalSince(updatedAt) >= 3.0
-            {
-                s.status = .waiting
+
+            // No model = agent never responded. Keep if fresh (< 60s), skip if stale.
+            if s.model == nil {
+                guard let started = s.startedAt, now.timeIntervalSince(started) < 60 else {
+                    return nil
+                }
             }
-            // Staleness heuristic: if "working" but no update in 30s,
-            // the session likely finished (e.g. user interrupted, or agent stopped
-            // without the Stop hook firing). Mark as waiting.
-            if s.status == .working,
-                let updatedAt = s.updatedAt,
-                now.timeIntervalSince(updatedAt) >= 30.0
-            {
-                s.status = .waiting
+
+            if let updatedAt = s.updatedAt {
+                let age = now.timeIntervalSince(updatedAt)
+                // Debounce: pending_waiting → waiting after 3 seconds
+                if s.status == .pendingWaiting, age >= 3.0 {
+                    s.status = .waiting
+                }
+                // Staleness: "working" with no update in 30s → waiting
+                if s.status == .working, age >= 30.0 {
+                    s.status = .waiting
+                }
             }
             return s
         }
