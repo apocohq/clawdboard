@@ -1,0 +1,30 @@
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - DerivedData
+
+disabled_rules:
+  - trailing_comma
+  - identifier_name
+  - type_body_length
+  - function_body_length
+  - file_length
+  - line_length  # swift-format handles this
+  - opening_brace  # conflicts with swift-format multi-line conditions
+  - implicit_optional_initialization  # stylistic, not a bug
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - contains_over_first_not_nil
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - modifier_order
+  - overridden_super_call
+  - private_action
+  - private_outlet
+  - redundant_nil_coalescing
+  - toggle_bool

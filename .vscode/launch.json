@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:clawdboard}",
+            "name": "Debug Clawdboard",
+            "target": "Clawdboard",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Clawdboard"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:clawdboard}",
+            "name": "Release Clawdboard",
+            "target": "Clawdboard",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Clawdboard"
+        }
+    ]
+}

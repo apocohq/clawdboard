@@ -1,0 +1,121 @@
+import SwiftUI
+
+/// The main panel shown when clicking the menu bar icon.
+/// Header with status summary, sessions list, and footer.
+public struct PanelView: View {
+    @Environment(AppState.self) private var appState
+
+    public init() {}
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            header
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+            Divider()
+
+            // Content
+            if appState.sessions.isEmpty {
+                emptyState
+            } else {
+                SessionsTab()
+            }
+
+            Divider()
+
+            // Footer
+            footer
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+        }
+        .frame(width: 420)
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Clawdboard")
+                .font(.headline)
+
+            Spacer()
+
+            // Status pills — compact: dot + count only
+            HStack(spacing: 6) {
+                if appState.needsApprovalCount > 0 {
+                    StatusPill(count: appState.needsApprovalCount, label: "approval", color: .red)
+                }
+                if appState.waitingCount > 0 {
+                    StatusPill(count: appState.waitingCount, label: "waiting", color: .orange)
+                }
+                if appState.workingCount > 0 {
+                    StatusPill(count: appState.workingCount, label: "working", color: .green)
+                }
+            }
+
+            Text(appState.formattedTotalCost)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "terminal")
+                .font(.title2)
+                .foregroundStyle(.tertiary)
+            Text("No active sessions")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Start a Claude Code session to see it here")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("\(appState.sessions.count) session\(appState.sessions.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Status Pill
+
+struct StatusPill: View {
+    let count: Int
+    let label: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text("\(count) \(label)")
+                .font(.caption2)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(color.opacity(0.12))
+        )
+    }
+}
