@@ -5,12 +5,12 @@ Native macOS menu bar app (SwiftUI) for monitoring Claude Code agent sessions.
 ## Build & Run
 
 ```bash
-make setup    # Install tools (mise) and git hooks
-make build    # swift build
-make run      # swift run Clawdboard
-make test     # swift test
-make format   # Auto-fix formatting
-make lint     # Check formatting + lint
+mise run setup    # Install tools and git hooks
+mise run build    # swift build
+mise run run      # swift run Clawdboard
+mise run test     # swift test
+mise run format   # Auto-fix formatting
+mise run lint     # Check formatting + lint
 ```
 
 ## Tooling

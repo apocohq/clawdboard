@@ -58,14 +58,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ClawdboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var appState = AppState()
+    @State private var appState: AppState = {
+        let state = AppState()
+        state.start()
+        return state
+    }()
 
     var body: some Scene {
         MenuBarExtra {
             PanelView()
                 .environment(appState)
-                .onAppear { appState.start() }
-                .onDisappear { appState.stop() }
         } label: {
             MenuBarLabel(appState: appState)
         }
@@ -77,30 +79,135 @@ struct ClawdboardApp: App {
     }
 }
 
-/// Menu bar icon with session count and status indicator.
+/// Menu bar label rendered as an NSImage so we get proper SF Symbols + text.
+/// SwiftUI MenuBarExtra labels don't reliably render complex view hierarchies,
+/// but a single Image backed by a rendered NSImage works perfectly.
 struct MenuBarLabel: View {
     let appState: AppState
 
     var body: some View {
-        let total = appState.sessions.count
         let approval = appState.needsApprovalCount
         let waiting = appState.waitingCount
+        let working = appState.workingCount
 
-        HStack(spacing: 3) {
-            Image(systemName: "terminal.fill")
-            if total > 0 {
-                Text("\(total)")
-                    .font(.caption2)
-            }
-            if approval > 0 {
-                Circle()
-                    .fill(.red)
-                    .frame(width: 6, height: 6)
-            } else if waiting > 0 {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 6, height: 6)
+        if approval == 0 && waiting == 0 && working == 0 {
+            Image(systemName: "terminal")
+        } else {
+            if let image = Self.renderStatusImage(
+                approval: approval, waiting: waiting, working: working
+            ) {
+                Image(nsImage: image)
             }
         }
+    }
+
+    /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
+    /// Orange pill background only when sessions need approval.
+    private static func renderStatusImage(
+        approval: Int, waiting: Int, working: Int
+    ) -> NSImage? {
+        var segments: [(symbol: String, count: Int)] = []
+        if approval > 0 {
+            segments.append(("exclamationmark.triangle.fill", approval))
+        }
+        if waiting > 0 {
+            segments.append(("hourglass", waiting))
+        }
+        if working > 0 {
+            segments.append(("bolt.fill", working))
+        }
+        guard !segments.isEmpty else { return nil }
+
+        let needsAttention = approval > 0
+        let foreground: NSColor = needsAttention ? .white : .controlTextColor
+        let dotForeground: NSColor = needsAttention ? .white.withAlphaComponent(0.7) : .secondaryLabelColor
+
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: foreground,
+        ]
+        let dotAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: dotForeground,
+        ]
+
+        let result = NSMutableAttributedString()
+
+        for (index, segment) in segments.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: " · ", attributes: dotAttrs))
+            }
+
+            if var symbolImage = NSImage(
+                systemSymbolName: segment.symbol, accessibilityDescription: nil
+            ) {
+                symbolImage = symbolImage.withSymbolConfiguration(symbolConfig) ?? symbolImage
+                if needsAttention {
+                    let tinted = NSImage(size: symbolImage.size)
+                    tinted.lockFocus()
+                    symbolImage.draw(in: NSRect(origin: .zero, size: symbolImage.size))
+                    foreground.set()
+                    NSRect(origin: .zero, size: symbolImage.size).fill(using: .sourceIn)
+                    tinted.unlockFocus()
+                    symbolImage = tinted
+                }
+                let attachment = NSTextAttachment()
+                attachment.image = symbolImage
+                let mid = font.capHeight / 2
+                attachment.bounds = CGRect(
+                    x: 0, y: mid - symbolImage.size.height / 2,
+                    width: symbolImage.size.width, height: symbolImage.size.height
+                )
+                result.append(NSAttributedString(attachment: attachment))
+            }
+
+            result.append(NSAttributedString(string: "\(segment.count)", attributes: textAttrs))
+        }
+
+        let textSize = result.size()
+        let hPad: CGFloat = needsAttention ? 4.0 : 0
+        let menuBarHeight = NSStatusBar.system.thickness
+        let imageSize = NSSize(
+            width: ceil(textSize.width) + hPad * 2,
+            height: menuBarHeight
+        )
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let pixelSize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
+
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(pixelSize.width),
+            pixelsHigh: Int(pixelSize.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        )!
+        rep.size = imageSize
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+
+        if needsAttention {
+            let pillRect = NSRect(origin: .zero, size: imageSize)
+            let path = NSBezierPath(roundedRect: pillRect, xRadius: 4, yRadius: 4)
+            NSColor.systemOrange.setFill()
+            path.fill()
+        }
+
+        let textY = (imageSize.height - textSize.height) / 2
+        result.draw(at: NSPoint(x: hPad, y: textY))
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: imageSize)
+        image.addRepresentation(rep)
+        image.isTemplate = !needsAttention
+        return image
     }
 }
