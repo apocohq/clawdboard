@@ -4,11 +4,27 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var hookStatus: String = "Checking..."
     @State private var isReinstalling = false
+    @AppStorage("useRedYellowMode") private var useRedYellowMode = true
 
     public init() {}
 
     public var body: some View {
         Form {
+            Section("Appearance") {
+                Toggle(isOn: $useRedYellowMode) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Two-color attention mode")
+                        Text(
+                            useRedYellowMode
+                                ? "Red = needs approval, Yellow = waiting"
+                                : "Yellow = needs attention"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section("Hook Status") {
                 HStack {
                     Text(hookStatus)
@@ -27,7 +43,7 @@ public struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 400, height: 200)
+        .frame(width: 400, height: 260)
         .onAppear { checkHookStatus() }
     }
 
