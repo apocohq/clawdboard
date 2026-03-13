@@ -124,17 +124,23 @@ struct MenuBarLabel: View {
         // Determine pill background color based on mode:
         // Red+Yellow mode: red for approval, yellow for waiting-only
         // Yellow-only mode: yellow for approval, no pill for waiting-only
-        let pillColor: NSColor? = {
-            if approval > 0 {
-                return useRedYellowMode ? .systemRed : .systemYellow
-            } else if waiting > 0 && useRedYellowMode {
-                return .systemYellow
-            }
-            return nil
-        }()
+        let pillColor: NSColor?
+        let needsDarkText: Bool
+        if approval > 0 && useRedYellowMode {
+            pillColor = .systemRed
+            needsDarkText = false
+        } else if approval > 0 {
+            pillColor = .systemYellow
+            needsDarkText = true
+        } else if waiting > 0 && useRedYellowMode {
+            pillColor = .systemYellow
+            needsDarkText = true
+        } else {
+            pillColor = nil
+            needsDarkText = false
+        }
 
         let hasPill = pillColor != nil
-        let needsDarkText = pillColor == .systemYellow
         let foreground: NSColor = hasPill ? (needsDarkText ? .black : .white) : .controlTextColor
         let dotForeground: NSColor =
             hasPill
