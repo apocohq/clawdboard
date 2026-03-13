@@ -19,6 +19,26 @@
             "target": "Clawdboard",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release Clawdboard"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:clawdboard}",
+            "name": "Debug ClawdboardTests",
+            "target": "ClawdboardTests",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ClawdboardTests"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:clawdboard}",
+            "name": "Release ClawdboardTests",
+            "target": "ClawdboardTests",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ClawdboardTests"
         }
     ]
 }

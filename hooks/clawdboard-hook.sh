@@ -110,14 +110,23 @@ try:
         cache_create = usage.get("cache_creation_input_tokens", 0) or 0
         cache_read = usage.get("cache_read_input_tokens", 0) or 0
 
-        # Context % — all input tokens + output tokens fill the context window.
-        # Output tokens become conversation history on the next turn.
-        # effectiveWindow is 180k (not 200k) — Claude reserves 20k for output.
+        # Context % — total tokens relative to model's context window.
+        # Includes input + cached + output (output becomes input next turn).
+        model = result.get("model", "")
+        context_windows = {
+            "opus": 200000,
+            "sonnet": 200000,
+            "haiku": 200000,
+        }
+        ctx_window = 200000  # default
+        for key, window in context_windows.items():
+            if key in model:
+                ctx_window = window
+                break
         context_used = input_tok + cache_create + cache_read + output_tok
-        result["context_pct"] = round(context_used / 180000 * 100, 1)
+        result["context_pct"] = round(context_used / ctx_window * 100, 1)
 
         # Incremental cost calculation from this message's usage
-        model = result.get("model", "")
         # Pricing per token (not per 1M)
         if "opus" in model:
             rates = (15e-6, 75e-6, 18.75e-6, 1.5e-6)

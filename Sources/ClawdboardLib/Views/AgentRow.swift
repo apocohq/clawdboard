@@ -39,6 +39,12 @@ public struct AgentRow: View {
                             Text("·")
                         }
                         Text(session.displayStatus.displayLabel)
+                        if session.displayStatus == .abandoned,
+                            let updatedAt = session.updatedAt
+                        {
+                            Text("·")
+                            Text(session.idleSince(updatedAt))
+                        }
                         if session.activeSubagentCount > 0 {
                             Text("·")
                             Text(

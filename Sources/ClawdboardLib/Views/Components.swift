@@ -39,6 +39,7 @@ public struct StatusDot: View {
         case .working, .pendingWaiting: return .green
         case .needsApproval: return .red
         case .waiting: return .orange
+        case .abandoned: return .gray.opacity(0.4)
         case .unknown: return .gray
         }
     }

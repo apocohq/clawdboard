@@ -1,12 +1,13 @@
 import Foundation
 
 /// Watches ~/.clawdboard/sessions/ for state file changes written by Claude hooks.
-/// Uses DispatchSource file system monitoring for instant detection, with a poll timer as safety net.
+/// Uses DispatchSource file system monitoring for instant detection.
+/// A separate low-frequency timer handles PID liveness cleanup for crashed sessions.
 public class SessionStateWatcher {
     private let sessionsDir: URL
     private var fileDescriptor: Int32 = -1
     private var dispatchSource: DispatchSourceFileSystemObject?
-    private var pollTimer: Timer?
+    private var cleanupTimer: Timer?
     private let onChange: ([AgentSession]) -> Void
 
     public init(sessionsDirectory: String? = nil, onChange: @escaping ([AgentSession]) -> Void) {
@@ -28,7 +29,7 @@ public class SessionStateWatcher {
         // Initial read
         notifyChanges()
 
-        // Set up DispatchSource for directory monitoring
+        // Set up DispatchSource for directory monitoring — fires instantly on file writes
         fileDescriptor = open(sessionsDir.path, O_EVTONLY)
         if fileDescriptor >= 0 {
             let source = DispatchSource.makeFileSystemObjectSource(
@@ -48,16 +49,18 @@ public class SessionStateWatcher {
             dispatchSource = source
         }
 
-        // Poll timer as safety net (every 5 seconds)
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        // Low-frequency cleanup timer for PID liveness checks only.
+        // Catches crashed sessions where SessionEnd hook didn't fire.
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) {
+            [weak self] _ in
             self?.notifyChanges()
         }
     }
 
     /// Stop watching
     public func stop() {
-        pollTimer?.invalidate()
-        pollTimer = nil
+        cleanupTimer?.invalidate()
+        cleanupTimer = nil
         dispatchSource?.cancel()
         dispatchSource = nil
     }

@@ -142,8 +142,9 @@ public enum AgentStatus: String, Codable, CaseIterable {
     case needsApproval = "needs_approval"
     case waiting
     case unknown
+    case abandoned
 
-    /// Sort order for display: needs_approval first (most urgent), then waiting, working, unknown
+    /// Sort order for display: needs_approval first (most urgent), then waiting, working, unknown, abandoned
     public var sortOrder: Int {
         switch self {
         case .needsApproval: return 0
@@ -151,6 +152,7 @@ public enum AgentStatus: String, Codable, CaseIterable {
         case .pendingWaiting: return 2
         case .working: return 3
         case .unknown: return 4
+        case .abandoned: return 5
         }
     }
 
@@ -161,6 +163,7 @@ public enum AgentStatus: String, Codable, CaseIterable {
         case .needsApproval: return "Needs Approval"
         case .waiting: return "Waiting"
         case .unknown: return "Unknown"
+        case .abandoned: return "Idle"
         }
     }
 }
@@ -310,5 +313,16 @@ public struct AgentSession: Identifiable, Codable, Equatable {
             return "\(hours)h \(minutes)m"
         }
         return "\(minutes)m"
+    }
+
+    /// Human-readable idle duration since a given date
+    public func idleSince(_ date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        let minutes = Int(interval) / 60
+        if minutes < 60 {
+            return "\(minutes)m ago"
+        }
+        let hours = minutes / 60
+        return "\(hours)h ago"
     }
 }

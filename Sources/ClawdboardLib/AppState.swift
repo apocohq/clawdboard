@@ -119,49 +119,57 @@ public class AppState {
     private func rebuildSessions() {
         let now = Date()
 
-        // Process local sessions with debounce/staleness logic
         let processedLocal = localSessions.compactMap { session -> AgentSession? in
-            var s = session
-            if s.model == nil {
-                guard let started = s.startedAt, now.timeIntervalSince(started) < 60 else {
-                    return nil
-                }
-            }
-            if let updatedAt = s.updatedAt {
-                let age = now.timeIntervalSince(updatedAt)
-                if s.status == .pendingWaiting, age >= 3.0 {
-                    s.status = .waiting
-                }
-                if s.status == .working, age >= 30.0 {
-                    s.status = .waiting
-                }
-            }
-            return s
+            processSession(session, now: now)
         }
 
-        // Process remote sessions — apply same debounce/staleness but skip PID checks
-        // (PID liveness was already skipped in RemoteSessionWatcher)
         let processedRemote = remoteSessions.values.flatMap { $0 }.compactMap {
             session -> AgentSession? in
-            var s = session
-            if s.model == nil {
-                guard let started = s.startedAt, now.timeIntervalSince(started) < 60 else {
-                    return nil
-                }
-            }
-            if let updatedAt = s.updatedAt {
-                let age = now.timeIntervalSince(updatedAt)
-                if s.status == .pendingWaiting, age >= 3.0 {
-                    s.status = .waiting
-                }
-                if s.status == .working, age >= 30.0 {
-                    s.status = .waiting
-                }
-            }
-            return s
+            processSession(session, now: now)
         }
 
         sessions = processedLocal + processedRemote
+    }
+
+    // MARK: - Session Processing
+
+    /// Apply ghost filtering, debounce, staleness, and abandoned logic to a session.
+    private func processSession(_ session: AgentSession, now: Date) -> AgentSession? {
+        var s = session
+
+        // Ghost session filter: no model means the session never produced output
+        if s.model == nil {
+            if let started = s.startedAt, let updated = s.updatedAt {
+                // Never received a second hook event (updatedAt ≈ startedAt)
+                let neverUpdated = abs(updated.timeIntervalSince(started)) < 1.0
+                if neverUpdated, now.timeIntervalSince(started) > 30 {
+                    return nil
+                }
+                // Even with updates, 5+ min with no model data is a dead session
+                if now.timeIntervalSince(updated) > 300 {
+                    return nil
+                }
+            }
+            // No timestamps at all — skip after 60s
+            guard let started = s.startedAt, now.timeIntervalSince(started) < 60 else {
+                return nil
+            }
+        }
+
+        if let updatedAt = s.updatedAt {
+            let age = now.timeIntervalSince(updatedAt)
+            if s.status == .pendingWaiting, age >= 1.5 {
+                s.status = .waiting
+            }
+            if s.status == .working, age >= 15.0 {
+                s.status = .waiting
+            }
+            // Long-idle sessions become abandoned
+            if s.status == .waiting, age >= 600.0 {
+                s.status = .abandoned
+            }
+        }
+        return s
     }
 
     // MARK: - Computed Properties
@@ -179,7 +187,9 @@ public class AppState {
 
     /// Sessions that are actively doing something (working or waiting for input)
     public var activeSessions: [AgentSession] {
-        sortedSessions.filter { $0.displayStatus != .unknown }
+        sortedSessions.filter {
+            $0.displayStatus != .unknown && $0.displayStatus != .abandoned
+        }
     }
 
     /// Number of sessions needing permission approval (most urgent)
