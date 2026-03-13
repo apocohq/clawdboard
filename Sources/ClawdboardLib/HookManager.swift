@@ -159,6 +159,11 @@ public class HookManager {
         try newData.write(to: claudeSettingsPath, options: .atomic)
     }
 
+    /// The hook script content for remote installation
+    public static func remoteHookScript() -> String {
+        hookScriptSource()
+    }
+
     /// The hook script content — read from repo or fallback to embedded
     private static func hookScriptSource() -> String {
         let executableURL = URL(fileURLWithPath: CommandLine.arguments[0])

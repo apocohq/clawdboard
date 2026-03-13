@@ -75,6 +75,7 @@ struct ClawdboardApp: App {
 
         Settings {
             SettingsView()
+                .environment(appState)
         }
     }
 }

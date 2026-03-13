@@ -24,6 +24,12 @@ public struct AgentRow: View {
                         .lineLimit(1)
 
                     HStack(spacing: 4) {
+                        if let host = session.remoteHost {
+                            Image(systemName: "network")
+                                .font(.caption2)
+                            Text(host)
+                            Text("·")
+                        }
                         if session.isHookTracked {
                             Text(session.shortModelName)
                             if let branch = session.gitBranch {
@@ -100,6 +106,9 @@ public struct AgentRow: View {
                 }
             }
 
+            if let host = session.remoteHost {
+                DetailRow("Host", host)
+            }
             DetailRow("Model", session.model ?? "—")
             DetailRow("Branch", session.gitBranch ?? "—")
             DetailRow("Cost", session.formattedCost)

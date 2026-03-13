@@ -1,5 +1,52 @@
 import Foundation
 
+// MARK: - Remote Host
+
+/// A remote machine to monitor for Claude Code sessions via SSH.
+public struct RemoteHost: Identifiable, Codable, Equatable {
+    public var id: String { host }
+
+    /// SSH destination (e.g. "user@hostname" or just "hostname" if user matches)
+    public var host: String
+
+    /// Display label (defaults to host if empty)
+    public var label: String
+
+    /// Whether this host is enabled for polling
+    public var isEnabled: Bool
+
+    /// Polling interval in seconds
+    public var pollInterval: TimeInterval
+
+    /// Hook installation status
+    public var hookStatus: RemoteHookStatus
+
+    public init(
+        host: String,
+        label: String = "",
+        isEnabled: Bool = true,
+        pollInterval: TimeInterval = 10,
+        hookStatus: RemoteHookStatus = .unknown
+    ) {
+        self.host = host
+        self.label = label
+        self.isEnabled = isEnabled
+        self.pollInterval = pollInterval
+        self.hookStatus = hookStatus
+    }
+
+    public var displayLabel: String {
+        label.isEmpty ? host : label
+    }
+}
+
+public enum RemoteHookStatus: String, Codable {
+    case unknown
+    case installed
+    case notInstalled = "not_installed"
+    case error
+}
+
 // MARK: - Agent Status
 
 public enum AgentStatus: String, Codable, CaseIterable {
@@ -79,6 +126,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// Whether this session was discovered via hooks (full data) or fallback (limited data)
     public var isHookTracked: Bool
 
+    /// If non-nil, this session lives on a remote machine (SSH host identifier)
+    public var remoteHost: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -96,6 +146,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case subagents
         case pid
         case isHookTracked = "is_hook_tracked"
+        case remoteHost = "remote_host"
     }
 
     public init(
@@ -114,7 +165,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         updatedAt: Date? = nil,
         subagents: [Subagent]? = nil,
         pid: Int? = nil,
-        isHookTracked: Bool = false
+        isHookTracked: Bool = false,
+        remoteHost: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -132,6 +184,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.subagents = subagents
         self.pid = pid
         self.isHookTracked = isHookTracked
+        self.remoteHost = remoteHost
     }
 
     /// Formatted cost string like "$1.47"
