@@ -84,6 +84,7 @@ struct ClawdboardApp: App {
 /// but a single Image backed by a rendered NSImage works perfectly.
 struct MenuBarLabel: View {
     let appState: AppState
+    @AppStorage("useRedYellowMode") private var useRedYellowMode = true
 
     var body: some View {
         let approval = appState.needsApprovalCount
@@ -94,7 +95,8 @@ struct MenuBarLabel: View {
             Image(systemName: "terminal")
         } else {
             if let image = Self.renderStatusImage(
-                approval: approval, waiting: waiting, working: working
+                approval: approval, waiting: waiting, working: working,
+                useRedYellowMode: useRedYellowMode
             ) {
                 Image(nsImage: image)
             }
@@ -102,9 +104,10 @@ struct MenuBarLabel: View {
     }
 
     /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
-    /// Orange pill background only when sessions need approval.
+    /// Pill background color depends on state and user's color mode preference.
     private static func renderStatusImage(
-        approval: Int, waiting: Int, working: Int
+        approval: Int, waiting: Int, working: Int,
+        useRedYellowMode: Bool
     ) -> NSImage? {
         var segments: [(symbol: String, count: Int)] = []
         if approval > 0 {
@@ -118,9 +121,25 @@ struct MenuBarLabel: View {
         }
         guard !segments.isEmpty else { return nil }
 
-        let needsAttention = approval > 0
-        let foreground: NSColor = needsAttention ? .white : .controlTextColor
-        let dotForeground: NSColor = needsAttention ? .white.withAlphaComponent(0.7) : .secondaryLabelColor
+        // Determine pill background color based on mode:
+        // Red+Yellow mode: red for approval, yellow for waiting-only
+        // Yellow-only mode: yellow for approval, no pill for waiting-only
+        let pillColor: NSColor? = {
+            if approval > 0 {
+                return useRedYellowMode ? .systemRed : .systemYellow
+            } else if waiting > 0 && useRedYellowMode {
+                return .systemYellow
+            }
+            return nil
+        }()
+
+        let hasPill = pillColor != nil
+        let needsDarkText = pillColor == .systemYellow
+        let foreground: NSColor = hasPill ? (needsDarkText ? .black : .white) : .controlTextColor
+        let dotForeground: NSColor =
+            hasPill
+            ? (needsDarkText ? .black.withAlphaComponent(0.5) : .white.withAlphaComponent(0.7))
+            : .secondaryLabelColor
 
         let font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
@@ -144,7 +163,7 @@ struct MenuBarLabel: View {
                 systemSymbolName: segment.symbol, accessibilityDescription: nil
             ) {
                 symbolImage = symbolImage.withSymbolConfiguration(symbolConfig) ?? symbolImage
-                if needsAttention {
+                if hasPill {
                     let tinted = NSImage(size: symbolImage.size)
                     tinted.lockFocus()
                     symbolImage.draw(in: NSRect(origin: .zero, size: symbolImage.size))
@@ -167,7 +186,7 @@ struct MenuBarLabel: View {
         }
 
         let textSize = result.size()
-        let hPad: CGFloat = needsAttention ? 4.0 : 0
+        let hPad: CGFloat = hasPill ? 4.0 : 0
         let menuBarHeight = NSStatusBar.system.thickness
         let imageSize = NSSize(
             width: ceil(textSize.width) + hPad * 2,
@@ -193,10 +212,10 @@ struct MenuBarLabel: View {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 
-        if needsAttention {
+        if let color = pillColor {
             let pillRect = NSRect(origin: .zero, size: imageSize)
             let path = NSBezierPath(roundedRect: pillRect, xRadius: 4, yRadius: 4)
-            NSColor.systemOrange.setFill()
+            color.setFill()
             path.fill()
         }
 
@@ -207,7 +226,7 @@ struct MenuBarLabel: View {
 
         let image = NSImage(size: imageSize)
         image.addRepresentation(rep)
-        image.isTemplate = !needsAttention
+        image.isTemplate = !hasPill
         return image
     }
 }

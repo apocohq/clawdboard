@@ -85,6 +85,9 @@ public struct PanelView: View {
             Spacer()
 
             Menu {
+                SettingsLink {
+                    Text("Settings...")
+                }
                 Button("Reinstall Hooks") {
                     try? HookManager.shared.install()
                 }
