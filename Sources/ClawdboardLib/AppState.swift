@@ -55,10 +55,13 @@ public class AppState {
 
     // MARK: - Remote Host Management
 
-    public func addRemoteHost() {
-        let host = RemoteHost(host: "", label: "")
-        remoteHosts.append(host)
+    public func addRemoteHost(host: String = "", label: String = "") {
+        let entry = RemoteHost(host: host, label: label)
+        remoteHosts.append(entry)
         saveRemoteHosts()
+        if !host.isEmpty {
+            remoteWatcher?.updateHosts(remoteHosts)
+        }
     }
 
     public func updateRemoteHost(at index: Int, with host: RemoteHost) {

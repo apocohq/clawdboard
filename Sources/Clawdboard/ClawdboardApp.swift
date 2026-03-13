@@ -76,6 +76,14 @@ struct ClawdboardApp: App {
         Settings {
             SettingsView()
                 .environment(appState)
+                .onAppear {
+                    for window in NSApplication.shared.windows
+                    where window.identifier?.rawValue.contains("settings") == true
+                        || window.title.contains("Settings")
+                    {
+                        window.level = .floating
+                    }
+                }
         }
     }
 }

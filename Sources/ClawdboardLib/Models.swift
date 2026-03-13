@@ -40,6 +40,93 @@ public struct RemoteHost: Identifiable, Codable, Equatable {
     }
 }
 
+// MARK: - SSH Config Parser
+
+/// A host entry parsed from ~/.ssh/config.
+public struct SSHConfigHost: Identifiable, Equatable {
+    public var id: String { alias }
+
+    /// The Host alias (e.g. "myvm")
+    public let alias: String
+
+    /// The HostName if specified, otherwise nil
+    public let hostname: String?
+
+    /// The User if specified, otherwise nil
+    public let user: String?
+
+    /// Display string like "user@hostname" or just the alias
+    public var displayString: String {
+        if let user = user, let hostname = hostname {
+            return "\(user)@\(hostname)"
+        }
+        if let hostname = hostname {
+            return hostname
+        }
+        return alias
+    }
+}
+
+/// Parses ~/.ssh/config for Host entries, skipping wildcards and defaults.
+public func parseSSHConfig() -> [SSHConfigHost] {
+    let configPath = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".ssh/config")
+    guard let contents = try? String(contentsOf: configPath, encoding: .utf8) else {
+        return []
+    }
+
+    var hosts: [SSHConfigHost] = []
+    var currentAlias: String?
+    var currentHostname: String?
+    var currentUser: String?
+
+    for line in contents.components(separatedBy: .newlines) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+
+        let parts = trimmed.split(separator: " ", maxSplits: 1)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2 else { continue }
+
+        let key = parts[0].lowercased()
+        let value = parts[1]
+
+        if key == "host" {
+            // Save previous entry
+            if let alias = currentAlias, !alias.contains("*"), alias != "*" {
+                hosts.append(
+                    SSHConfigHost(
+                        alias: alias, hostname: currentHostname, user: currentUser))
+            }
+            currentAlias = value
+            currentHostname = nil
+            currentUser = nil
+        } else if key == "hostname" {
+            currentHostname = value
+        } else if key == "user" {
+            currentUser = value
+        }
+    }
+
+    // Save last entry
+    if let alias = currentAlias, !alias.contains("*"), alias != "*" {
+        hosts.append(
+            SSHConfigHost(
+                alias: alias, hostname: currentHostname, user: currentUser))
+    }
+
+    // Filter out well-known non-machine hosts (git forges, package registries, etc.)
+    let excludedPatterns = [
+        "github.com", "gitlab.com", "bitbucket.org", "ssh.dev.azure.com",
+        "vs-ssh.visualstudio.com", "source.developers.google.com",
+        "git-codecommit", "heroku.com", "codeberg.org", "sr.ht",
+    ]
+    return hosts.filter { entry in
+        let name = (entry.hostname ?? entry.alias).lowercased()
+        return !excludedPatterns.contains { name.contains($0) }
+    }
+}
+
 public enum RemoteHookStatus: String, Codable {
     case unknown
     case installed

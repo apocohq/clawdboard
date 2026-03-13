@@ -4,6 +4,7 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var hookStatus: String = "Checking..."
     @State private var isReinstalling = false
+    @State private var sshConfigHosts: [SSHConfigHost] = []
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @Environment(AppState.self) private var appState
 
@@ -102,12 +103,7 @@ public struct SettingsView: View {
                 HStack {
                     Text("SSH Hosts")
                     Spacer()
-                    Button {
-                        appState.addRemoteHost()
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.plain)
+                    addHostMenu
                 }
             } footer: {
                 Text(
@@ -118,6 +114,48 @@ public struct SettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .onAppear { sshConfigHosts = parseSSHConfig() }
+    }
+
+    private var addHostMenu: some View {
+        let alreadyAdded = Set(appState.remoteHosts.map(\.host))
+        let available = sshConfigHosts.filter { !alreadyAdded.contains($0.alias) }
+
+        return Menu {
+            Button("New Host...") {
+                appState.addRemoteHost()
+            }
+
+            if !available.isEmpty {
+                Divider()
+
+                Section("From ~/.ssh/config") {
+                    ForEach(available) { entry in
+                        Button {
+                            appState.addRemoteHost(
+                                host: entry.alias,
+                                label: entry.hostname != nil ? entry.displayString : ""
+                            )
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(entry.alias)
+                                if let hostname = entry.hostname {
+                                    Text(
+                                        [entry.user, hostname]
+                                            .compactMap { $0 }
+                                            .joined(separator: "@")
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     // MARK: - Helpers
