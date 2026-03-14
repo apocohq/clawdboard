@@ -68,6 +68,9 @@ description = "Install tools and configure git hooks"
 run = """
 mise install
 mise generate git-pre-commit --write
+# Fix mise's default pre-commit hook: use newline-separated file list
+# so grep can match by extension (mise uses -z | xargs -0 which is space-separated)
+sed -i '' 's/diff-index --cached --name-only -z HEAD | xargs -0/diff-index --cached --name-only HEAD/' .git/hooks/pre-commit
 echo "Done! Tools installed and pre-commit hook configured."
 """
 
