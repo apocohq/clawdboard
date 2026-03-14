@@ -128,7 +128,7 @@ public class RemoteSessionWatcher {
             "-o", "ConnectTimeout=5",
             "-o", "BatchMode=yes",
             host,
-            "test -f ~/.clawdboard/hooks/clawdboard-hook.sh && echo installed || echo missing",
+            "test -f ~/.clawdboard/hooks/clawdboard-hook.py && echo installed || echo missing",
         ]
 
         let pipe = Pipe()
@@ -164,10 +164,10 @@ public class RemoteSessionWatcher {
 
         let installCommand = """
             mkdir -p ~/.clawdboard/hooks ~/.clawdboard/sessions && \
-            cat > ~/.clawdboard/hooks/clawdboard-hook.sh << 'CLAWDBOARD_HOOK_EOF'
+            cat > ~/.clawdboard/hooks/clawdboard-hook.py << 'CLAWDBOARD_HOOK_EOF'
             \(hookScript)
             CLAWDBOARD_HOOK_EOF
-            chmod 755 ~/.clawdboard/hooks/clawdboard-hook.sh && \
+            chmod 755 ~/.clawdboard/hooks/clawdboard-hook.py && \
             python3 -c "
             import json, os
             settings_path = os.path.expanduser('~/.claude/settings.json')
@@ -178,7 +178,7 @@ public class RemoteSessionWatcher {
                     settings = json.load(open(settings_path))
                 except: pass
             hooks = settings.get('hooks', {})
-            hook_cmd = 'bash ~/.clawdboard/hooks/clawdboard-hook.sh'
+            hook_cmd = 'python3 ~/.clawdboard/hooks/clawdboard-hook.py'
             events = ['SessionStart','PostToolUse','PermissionRequest','Stop','UserPromptSubmit','SessionEnd','SubagentStart','SubagentStop']
             for event in events:
                 entries = [e for e in hooks.get(event, []) if not any('clawdboard' in h.get('command','') for h in e.get('hooks',[]))]

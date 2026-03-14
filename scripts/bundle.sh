@@ -21,8 +21,8 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
 # Copy hook script
-cp hooks/clawdboard-hook.sh "${RESOURCES_DIR}/clawdboard-hook.sh"
-chmod +x "${RESOURCES_DIR}/clawdboard-hook.sh"
+cp hooks/clawdboard-hook.py "${RESOURCES_DIR}/clawdboard-hook.py"
+chmod +x "${RESOURCES_DIR}/clawdboard-hook.py"
 
 # Write Info.plist
 cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'

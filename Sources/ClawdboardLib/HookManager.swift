@@ -60,8 +60,8 @@ public class HookManager {
         let fm = FileManager.default
         try ensureDirectories()
 
-        let hookScriptContent = Self.hookScriptSource()
-        let destPath = hooksDir.appendingPathComponent("clawdboard-hook.sh")
+        let hookScriptContent = try Self.scriptSource("clawdboard-hook.py")
+        let destPath = hooksDir.appendingPathComponent("clawdboard-hook.py")
         try hookScriptContent.write(to: destPath, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destPath.path)
     }
@@ -79,7 +79,7 @@ public class HookManager {
         }
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        let hookCommand = "bash \(hooksDir.path)/clawdboard-hook.sh"
+        let hookCommand = "python3 \(hooksDir.path)/clawdboard-hook.py"
 
         let hookEntry: [String: Any] = [
             "type": "command",
@@ -128,107 +128,83 @@ public class HookManager {
         try installHooksInSettings()
     }
 
-    /// Remove Clawdboard hooks from settings.json
+    /// Remove Clawdboard hooks from settings.json and clean up local files.
     public func uninstall() throws {
-        guard FileManager.default.fileExists(atPath: claudeSettingsPath.path) else { return }
+        let fm = FileManager.default
 
-        let data = try Data(contentsOf: claudeSettingsPath)
-        guard var settings = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            var hooks = settings["hooks"] as? [String: Any]
-        else { return }
-
-        for (event, eventHooks) in hooks {
-            guard var entries = eventHooks as? [[String: Any]] else { continue }
-            entries.removeAll { entry in
-                guard let hooksList = entry["hooks"] as? [[String: Any]] else { return false }
-                return hooksList.contains { hook in
-                    (hook["command"] as? String)?.contains("clawdboard") == true
+        // Remove hooks from Claude settings
+        if fm.fileExists(atPath: claudeSettingsPath.path) {
+            let data = try Data(contentsOf: claudeSettingsPath)
+            if var settings = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                var hooks = settings["hooks"] as? [String: Any]
+            {
+                for (event, eventHooks) in hooks {
+                    guard var entries = eventHooks as? [[String: Any]] else { continue }
+                    entries.removeAll { entry in
+                        guard let hooksList = entry["hooks"] as? [[String: Any]] else {
+                            return false
+                        }
+                        return hooksList.contains { hook in
+                            (hook["command"] as? String)?.contains("clawdboard") == true
+                        }
+                    }
+                    if entries.isEmpty {
+                        hooks.removeValue(forKey: event)
+                    } else {
+                        hooks[event] = entries
+                    }
                 }
-            }
-            if entries.isEmpty {
-                hooks.removeValue(forKey: event)
-            } else {
-                hooks[event] = entries
+
+                settings["hooks"] = hooks.isEmpty ? nil : hooks
+
+                let newData = try JSONSerialization.data(
+                    withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+                try newData.write(to: claudeSettingsPath, options: .atomic)
             }
         }
 
-        settings["hooks"] = hooks.isEmpty ? nil : hooks
-
-        let newData = try JSONSerialization.data(
-            withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-        try newData.write(to: claudeSettingsPath, options: .atomic)
+        // Clean up ~/.clawdboard/sessions/ and hooks/
+        try? fm.removeItem(at: sessionsDir)
+        try? fm.removeItem(at: hooksDir)
     }
 
     /// The hook script content for remote installation
     public static func remoteHookScript() -> String {
-        hookScriptSource()
+        try! scriptSource("clawdboard-hook.py")
     }
 
-    /// The hook script content — read from repo or fallback to embedded
-    private static func hookScriptSource() -> String {
+    /// Load a Python script from the hooks/ directory.
+    /// Searches relative to the executable (repo layout) then relative to cwd.
+    public static func scriptSource(_ filename: String) throws -> String {
         let executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
-        let repoHookPath =
+        let repoPath =
             executableURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("hooks/clawdboard-hook.sh")
+            .appendingPathComponent("hooks/\(filename)")
 
-        if let content = try? String(contentsOf: repoHookPath, encoding: .utf8) {
+        if let content = try? String(contentsOf: repoPath, encoding: .utf8) {
             return content
         }
 
         let cwdPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("hooks/clawdboard-hook.sh")
+            .appendingPathComponent("hooks/\(filename)")
         if let content = try? String(contentsOf: cwdPath, encoding: .utf8) {
             return content
         }
 
-        return embeddedHookScript
+        throw HookError.scriptNotFound(filename)
     }
 
-    private static let embeddedHookScript = """
-        #!/bin/bash
-        set -euo pipefail
-        SESSIONS_DIR="$HOME/.clawdboard/sessions"
-        mkdir -p "$SESSIONS_DIR"
-        INPUT=$(cat)
-        SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))")
-        HOOK_EVENT=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('hook_event_name',''))")
-        CWD=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('cwd',''))")
-        NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        [ -z "$SESSION_ID" ] && exit 0
-        STATE_FILE="$SESSIONS_DIR/$SESSION_ID.json"
-        PROJECT_NAME=$(basename "$CWD")
-        case "$HOOK_EVENT" in
-            SessionStart|PostToolUse|UserPromptSubmit)
-                python3 -c "
-        import json,os
-        s = json.load(open('$STATE_FILE')) if os.path.isfile('$STATE_FILE') else {}
-        s.update({'session_id':'$SESSION_ID','cwd':'$CWD','project_name':'$PROJECT_NAME','status':'working','updated_at':'$NOW','is_hook_tracked':True})
-        s.setdefault('started_at','$NOW')
-        json.dump(s,open('$STATE_FILE','w'),indent=2)
-        ";;
-            Stop)
-                [ -f "$STATE_FILE" ] && python3 -c "
-        import json
-        s=json.load(open('$STATE_FILE'))
-        s['status']='pending_waiting'
-        s['updated_at']='$NOW'
-        json.dump(s,open('$STATE_FILE','w'),indent=2)
-        ";;
-            PermissionRequest)
-                [ -f "$STATE_FILE" ] && python3 -c "
-        import json
-        s=json.load(open('$STATE_FILE'))
-        s['status']='needs_approval'
-        s['updated_at']='$NOW'
-        json.dump(s,open('$STATE_FILE','w'),indent=2)
-        ";;
-            SessionEnd)
-                rm -f "$STATE_FILE";;
-        esac
-        echo '{"suppressOutput": true}'
-        exit 0
-        """
+    public enum HookError: Error, LocalizedError {
+        case scriptNotFound(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .scriptNotFound(let name):
+                return "Hook script '\(name)' not found in hooks/ directory"
+            }
+        }
+    }
 }

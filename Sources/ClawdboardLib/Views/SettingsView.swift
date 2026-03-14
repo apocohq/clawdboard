@@ -4,6 +4,7 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var hookStatus: String = "Checking..."
     @State private var isReinstalling = false
+    @State private var showUninstallConfirm = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @Environment(AppState.self) private var appState
@@ -50,6 +51,21 @@ public struct SettingsView: View {
                         reinstallHooks()
                     }
                     .disabled(isReinstalling)
+
+                    Button("Uninstall", role: .destructive) {
+                        showUninstallConfirm = true
+                    }
+                    .disabled(isReinstalling)
+                }
+                .alert("Uninstall Hooks?", isPresented: $showUninstallConfirm) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Uninstall", role: .destructive) {
+                        uninstallHooks()
+                    }
+                } message: {
+                    Text(
+                        "This removes Clawdboard hooks from ~/.claude/settings.json and deletes session data. Claude Code will not be affected."
+                    )
                 }
             }
 
@@ -173,6 +189,15 @@ public struct SettingsView: View {
             hookStatus = "Error: \(error.localizedDescription)"
         }
         isReinstalling = false
+    }
+
+    private func uninstallHooks() {
+        do {
+            try HookManager.shared.uninstall()
+            hookStatus = "Not installed"
+        } catch {
+            hookStatus = "Error: \(error.localizedDescription)"
+        }
     }
 }
 

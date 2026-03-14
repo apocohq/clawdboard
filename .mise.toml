@@ -1,5 +1,6 @@
 [tools]
 swiftlint = "0.63"
+ruff = "latest"
 
 [tasks.build]
 description = "Build the project"
@@ -29,11 +30,16 @@ output=$(swift test 2>&1) && echo "$output" || {
 """
 
 [tasks.format]
-description = "Format Swift files with swift-format"
-run = "swift format format --in-place --recursive Sources/ Tests/"
+description = "Format Swift and Python files"
+run = """
+#!/bin/bash
+set -euo pipefail
+swift format format --in-place --recursive Sources/ Tests/
+ruff format hooks/ scripts/
+"""
 
 [tasks.lint]
-description = "Lint Swift files with swift-format and swiftlint"
+description = "Lint Swift and Python files"
 run = """
 #!/bin/bash
 set -euo pipefail
@@ -49,6 +55,8 @@ if [ $rc -ne 0 ]; then
         exit $rc
     fi
 fi
+ruff check hooks/ scripts/
+ruff format --check hooks/ scripts/
 """
 
 [tasks.clean]
@@ -64,22 +72,34 @@ echo "Done! Tools installed and pre-commit hook configured."
 """
 
 [tasks.pre-commit]
-description = "Pre-commit checks on staged Swift files"
+description = "Pre-commit checks on staged Swift and Python files"
 run = """
 #!/bin/bash
 set -euo pipefail
 
-STAGED=$(echo "$STAGED" | grep '\\.swift$' || true)
-if [ -z "$STAGED" ]; then
-    echo "No staged Swift files, skipping checks."
+SWIFT_FILES=$(echo "$STAGED" | grep '\\.swift$' || true)
+PY_FILES=$(echo "$STAGED" | grep '\\.py$' || true)
+
+if [ -z "$SWIFT_FILES" ] && [ -z "$PY_FILES" ]; then
+    echo "No staged Swift or Python files, skipping checks."
     exit 0
 fi
 
-echo "swift-format..."
-echo "$STAGED" | xargs swift format lint --strict
+if [ -n "$SWIFT_FILES" ]; then
+    echo "swift-format..."
+    echo "$SWIFT_FILES" | xargs swift format lint --strict
 
-echo "swiftlint..."
-echo "$STAGED" | xargs swiftlint lint --strict --quiet
+    echo "swiftlint..."
+    echo "$SWIFT_FILES" | xargs swiftlint lint --strict --quiet
+fi
+
+if [ -n "$PY_FILES" ]; then
+    echo "ruff check..."
+    echo "$PY_FILES" | xargs ruff check
+
+    echo "ruff format..."
+    echo "$PY_FILES" | xargs ruff format --check
+fi
 
 echo "All checks passed."
 """
