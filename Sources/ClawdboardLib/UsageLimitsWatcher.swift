@@ -65,15 +65,24 @@ public class UsageLimitsWatcher {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
         let pipe = Pipe()
+        let errPipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
+        process.standardError = errPipe
         do {
             try process.run()
             process.waitUntilExit()
         } catch {
+            NSLog("[UsageLimits] Keychain: failed to run security CLI: \(error)")
             return nil
         }
-        guard process.terminationStatus == 0 else { return nil }
+        guard process.terminationStatus == 0 else {
+            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let errStr = String(data: errData, encoding: .utf8) ?? ""
+            NSLog(
+                "[UsageLimits] Keychain: security exited \(process.terminationStatus): \(errStr.prefix(200))"
+            )
+            return nil
+        }
         let output = pipe.fileHandleForReading.readDataToEndOfFile()
         guard
             let jsonString = String(data: output, encoding: .utf8)?.trimmingCharacters(
