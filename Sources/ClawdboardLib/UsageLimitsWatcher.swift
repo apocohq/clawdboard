@@ -1,8 +1,8 @@
 import Foundation
 
-/// Fetches usage limits from the Claude API using the OAuth token from ~/.claude/.credentials.json.
-/// Caches results to ~/.clawdboard/usage-limits.json to avoid rate limits across restarts.
-/// Polls every 60s but skips the API call if cached data is fresh enough.
+/// Fetches usage limits from the Claude API using the OAuth token from the macOS Keychain
+/// (falling back to ~/.claude/.credentials.json). Caches results to ~/.clawdboard/usage-limits.json
+/// to avoid rate limits across restarts. Polls every 60s but skips the API call if cached data is fresh enough.
 public class UsageLimitsWatcher {
     private static let pollInterval: TimeInterval = 60
     private static let minFetchInterval: TimeInterval = 60
@@ -49,6 +49,45 @@ public class UsageLimitsWatcher {
     // MARK: - Credentials
 
     private static func readAccessToken() -> String? {
+        // Try macOS Keychain first (Claude Code >=2.x stores tokens here)
+        if let token = readAccessTokenFromKeychain() {
+            return token
+        }
+        // Fall back to credentials file (older Claude Code versions)
+        if let token = readAccessTokenFromFile() {
+            return token
+        }
+        return nil
+    }
+
+    private static func readAccessTokenFromKeychain() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard
+            let jsonString = String(data: output, encoding: .utf8)?.trimmingCharacters(
+                in: .whitespacesAndNewlines),
+            let jsonData = jsonString.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+            let token = json["accessToken"] as? String, !token.isEmpty
+        else {
+            return nil
+        }
+        return token
+    }
+
+    private static func readAccessTokenFromFile() -> String? {
         guard let data = try? Data(contentsOf: credentialsFile),
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let oauth = json["claudeAiOauth"] as? [String: Any],
