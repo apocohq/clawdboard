@@ -111,6 +111,7 @@ public class UsageLimitsWatcher {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             guard let token = Self.readAccessToken() else {
+                NSLog("[UsageLimits] No access token found in credentials file")
                 DispatchQueue.main.async {
                     // Still serve cached data if available
                     self.onChange(Self.loadCache())
@@ -126,7 +127,8 @@ public class UsageLimitsWatcher {
             request.setValue("application/json", forHTTPHeaderField: "Accept")
 
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if error != nil {
+                if let error = error {
+                    NSLog("[UsageLimits] Network error: \(error.localizedDescription)")
                     // Serve cached data on network error
                     DispatchQueue.main.async { self.onChange(Self.loadCache()) }
                     return
@@ -165,6 +167,7 @@ public class UsageLimitsWatcher {
                     )
                     DispatchQueue.main.async { self.onChange(result) }
                 } catch {
+                    NSLog("[UsageLimits] Decode error: \(error)")
                     DispatchQueue.main.async { self.onChange(Self.loadCache()) }
                 }
             }
