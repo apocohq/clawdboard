@@ -87,10 +87,17 @@ public class UsageLimitsWatcher {
         guard
             let jsonString = String(data: output, encoding: .utf8)?.trimmingCharacters(
                 in: .whitespacesAndNewlines),
+            !jsonString.isEmpty
+        else {
+            NSLog("[UsageLimits] Keychain: security returned empty output")
+            return nil
+        }
+        guard
             let jsonData = jsonString.data(using: .utf8),
             let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
             let token = json["accessToken"] as? String, !token.isEmpty
         else {
+            NSLog("[UsageLimits] Keychain: could not parse output: \(jsonString.prefix(200))")
             return nil
         }
         return token
