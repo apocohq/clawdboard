@@ -1,8 +1,8 @@
 import Foundation
 
-/// Fetches usage limits from the Claude API using the OAuth token from ~/.claude/.credentials.json.
-/// Caches results to ~/.clawdboard/usage-limits.json to avoid rate limits across restarts.
-/// Polls every 60s but skips the API call if cached data is fresh enough.
+/// Fetches usage limits from the Claude API using the OAuth token from the macOS Keychain
+/// (falling back to ~/.claude/.credentials.json). Caches results to ~/.clawdboard/usage-limits.json
+/// to avoid rate limits across restarts. Polls every 60s but skips the API call if cached data is fresh enough.
 public class UsageLimitsWatcher {
     private static let pollInterval: TimeInterval = 60
     private static let minFetchInterval: TimeInterval = 60
@@ -49,6 +49,71 @@ public class UsageLimitsWatcher {
     // MARK: - Credentials
 
     private static func readAccessToken() -> String? {
+        // Try macOS Keychain first (Claude Code >=2.x stores tokens here)
+        if let token = readAccessTokenFromKeychain() {
+            return token
+        }
+        // Fall back to credentials file (older Claude Code versions)
+        if let token = readAccessTokenFromFile() {
+            return token
+        }
+        return nil
+    }
+
+    private static func readAccessTokenFromKeychain() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        let pipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = errPipe
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            NSLog("[UsageLimits] Keychain: failed to run security CLI: \(error)")
+            return nil
+        }
+        guard process.terminationStatus == 0 else {
+            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let errStr = String(data: errData, encoding: .utf8) ?? ""
+            NSLog(
+                "[UsageLimits] Keychain: security exited \(process.terminationStatus): \(errStr.prefix(200))"
+            )
+            return nil
+        }
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard
+            let jsonString = String(data: output, encoding: .utf8)?.trimmingCharacters(
+                in: .whitespacesAndNewlines),
+            !jsonString.isEmpty
+        else {
+            NSLog("[UsageLimits] Keychain: security returned empty output")
+            return nil
+        }
+        guard
+            let jsonData = jsonString.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        else {
+            NSLog("[UsageLimits] Keychain: could not parse output: \(jsonString.prefix(200))")
+            return nil
+        }
+        // Keychain stores same structure as credentials file: {claudeAiOauth: {accessToken: ...}}
+        let token: String?
+        if let oauth = json["claudeAiOauth"] as? [String: Any] {
+            token = oauth["accessToken"] as? String
+        } else {
+            token = json["accessToken"] as? String
+        }
+        guard let token, !token.isEmpty else {
+            NSLog("[UsageLimits] Keychain: no accessToken in JSON")
+            return nil
+        }
+        return token
+    }
+
+    private static func readAccessTokenFromFile() -> String? {
         guard let data = try? Data(contentsOf: credentialsFile),
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let oauth = json["claudeAiOauth"] as? [String: Any],
@@ -111,6 +176,7 @@ public class UsageLimitsWatcher {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             guard let token = Self.readAccessToken() else {
+                NSLog("[UsageLimits] No access token found in credentials file")
                 DispatchQueue.main.async {
                     // Still serve cached data if available
                     self.onChange(Self.loadCache())
@@ -126,7 +192,8 @@ public class UsageLimitsWatcher {
             request.setValue("application/json", forHTTPHeaderField: "Accept")
 
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if error != nil {
+                if let error = error {
+                    NSLog("[UsageLimits] Network error: \(error.localizedDescription)")
                     // Serve cached data on network error
                     DispatchQueue.main.async { self.onChange(Self.loadCache()) }
                     return
@@ -165,6 +232,7 @@ public class UsageLimitsWatcher {
                     )
                     DispatchQueue.main.async { self.onChange(result) }
                 } catch {
+                    NSLog("[UsageLimits] Decode error: \(error)")
                     DispatchQueue.main.async { self.onChange(Self.loadCache()) }
                 }
             }
