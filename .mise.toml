@@ -1,6 +1,11 @@
 [tools]
 swiftlint = "0.63"
 ruff = "latest"
+ty = "latest"
+uv = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
 
 [tasks.build]
 description = "Build the project"
@@ -44,20 +49,19 @@ run = """
 #!/bin/bash
 set -euo pipefail
 swift format lint --strict --recursive Sources/ Tests/
-set +e
-swiftlint lint --strict --quiet 2>&1
-rc=$?
-set -e
-if [ $rc -ne 0 ]; then
-    if [ $rc -gt 128 ]; then
-        echo "⚠ swiftlint crashed (requires Xcode SourceKit). Skipping."
-    else
-        exit $rc
-    fi
+if [ -d /Applications/Xcode.app ]; then
+    swiftlint lint --strict --quiet
+else
+    echo "⚠ swiftlint skipped (requires Xcode, not just Command Line Tools)"
 fi
 ruff check hooks/ scripts/
 ruff format --check hooks/ scripts/
+ty check hooks/ scripts/
 """
+
+[tasks.test-py]
+description = "Run Python hook tests"
+run = "uv run pytest Tests/python/ -v"
 
 [tasks.clean]
 description = "Clean build artifacts"
@@ -67,6 +71,7 @@ run = "swift package clean"
 description = "Install tools and configure git hooks"
 run = """
 mise install
+uv sync
 mise generate git-pre-commit --write
 # Fix mise's default pre-commit hook: use newline-separated file list
 # so grep can match by extension (mise uses -z | xargs -0 which is space-separated)
@@ -92,8 +97,10 @@ if [ -n "$SWIFT_FILES" ]; then
     echo "swift-format..."
     echo "$SWIFT_FILES" | xargs swift format lint --strict
 
-    echo "swiftlint..."
-    echo "$SWIFT_FILES" | xargs swiftlint lint --strict --quiet
+    if [ -d /Applications/Xcode.app ]; then
+        echo "swiftlint..."
+        echo "$SWIFT_FILES" | xargs swiftlint lint --strict --quiet
+    fi
 fi
 
 if [ -n "$PY_FILES" ]; then
@@ -102,6 +109,9 @@ if [ -n "$PY_FILES" ]; then
 
     echo "ruff format..."
     echo "$PY_FILES" | xargs ruff format --check
+
+    echo "ty check..."
+    echo "$PY_FILES" | xargs ty check
 fi
 
 echo "All checks passed."

@@ -6,3 +6,6 @@
 *.xcworkspace
 xcuserdata/
 DerivedData/
+.venv
+__pycache__/
+uv.lock

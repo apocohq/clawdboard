@@ -15,6 +15,13 @@ public struct PanelView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 6)
 
+            // Usage limits (Claude API)
+            if let limits = appState.usageLimits {
+                UsageLimitsView(limits: limits)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+            }
+
             Divider()
 
             // Content
@@ -53,10 +60,6 @@ public struct PanelView: View {
                     StatusPill(count: appState.workingCount, label: "working", color: .green)
                 }
             }
-
-            Text(appState.formattedTotalCost)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
         }
     }
 

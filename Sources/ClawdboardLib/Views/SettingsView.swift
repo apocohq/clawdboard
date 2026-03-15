@@ -7,6 +7,7 @@ public struct SettingsView: View {
     @State private var showUninstallConfirm = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
+    @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
     @Environment(AppState.self) private var appState
 
     public init() {}
@@ -67,6 +68,21 @@ public struct SettingsView: View {
                         "This removes Clawdboard hooks from ~/.claude/settings.json and deletes session data. Claude Code will not be affected."
                     )
                 }
+            }
+
+            Section("Usage Limits") {
+                HStack {
+                    Text("Show ring indicator above")
+                    Picker("", selection: $usageRingThreshold) {
+                        Text("Always").tag(0)
+                        Text("25%").tag(25)
+                        Text("50%").tag(50)
+                        Text("75%").tag(75)
+                        Text("Never").tag(101)
+                    }
+                    .frame(width: 100)
+                }
+                .font(.caption)
             }
 
             Section("About") {

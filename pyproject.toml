@@ -1,0 +1,25 @@
+[project]
+name = "clawdboard-hooks"
+version = "0.1.0"
+description = "Python hooks for Clawdboard — Claude Code session monitor"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"Tests/**" = ["ANN"]  # Don't require annotations in tests
+
+[tool.pytest.ini_options]
+testpaths = ["Tests/python"]
+pythonpath = ["hooks"]

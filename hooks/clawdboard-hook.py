@@ -12,24 +12,110 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any
+
+# JSON dict type alias
+JsonDict = dict[str, Any]
 
 SESSIONS_DIR = Path.home() / ".clawdboard" / "sessions"
 LOG_FILE = Path.home() / ".clawdboard" / "hook-debug.log"
+MODEL_CACHE_FILE = Path.home() / ".clawdboard" / "model-context-windows.json"
+LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
 
-def main():
+def get_context_window(model_id: str) -> int:
+    """Look up context window size for a model from cached LiteLLM data.
+
+    Fetches from GitHub on first call (or if cache is >24h old), then uses cache.
+    Falls back to 200k if anything fails.
+    """
+    if not model_id:
+        return 200000
+
+    # Try to load/refresh cache
+    cache = _load_model_cache()
+    if cache:
+        # Try exact match first, then prefix match
+        if model_id in cache:
+            return cache[model_id]
+        # Try matching by model family (prefix match)
+        for key, window in cache.items():
+            if key.startswith(model_id) or model_id.startswith(key):
+                return window
+
+    return 200000
+
+
+def _load_model_cache() -> dict[str, int]:
+    """Load or refresh the model context window cache."""
+    # Check if cache exists and is fresh (<24h)
+    try:
+        if MODEL_CACHE_FILE.is_file():
+            age = (
+                datetime.now(timezone.utc).timestamp()
+                - MODEL_CACHE_FILE.stat().st_mtime
+            )
+            if age < 86400:  # 24 hours
+                return json.loads(MODEL_CACHE_FILE.read_text())
+    except Exception:
+        pass
+
+    # Fetch fresh data (non-blocking: if it fails, use stale cache or empty)
+    try:
+        import urllib.request
+
+        resp = urllib.request.urlopen(LITELLM_URL, timeout=3)
+        data = json.loads(resp.read())
+        # Extract Claude model context windows
+        cache: dict[str, int] = {}
+        for key, val in data.items():
+            if not isinstance(val, dict):
+                continue
+            if "claude" not in key:
+                continue
+            # Skip provider-prefixed keys, keep canonical names
+            if "/" in key or "." in key:
+                continue
+            max_input = val.get("max_input_tokens")
+            if isinstance(max_input, int) and max_input > 0:
+                cache[key] = max_input
+        if cache:
+            MODEL_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            MODEL_CACHE_FILE.write_text(json.dumps(cache, indent=2))
+            return cache
+    except Exception:
+        pass
+
+    # Fall back to stale cache
+    try:
+        if MODEL_CACHE_FILE.is_file():
+            return json.loads(MODEL_CACHE_FILE.read_text())
+    except Exception:
+        pass
+
+    # Last resort: hardcoded baseline (updated 2026-03-15)
+    return {
+        "claude-opus-4-6": 1000000,
+        "claude-sonnet-4-6": 200000,
+        "claude-sonnet-4-5": 200000,
+        "claude-opus-4-5": 200000,
+        "claude-opus-4-1": 200000,
+        "claude-haiku-4-5": 200000,
+    }
+
+
+def main() -> None:
     notification_subtype = sys.argv[1] if len(sys.argv) > 1 else ""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     hook_input = json.loads(sys.stdin.read())
 
-    session_id = hook_input.get("session_id", "")
-    hook_event = hook_input.get("hook_event_name", "")
-    cwd = hook_input.get("cwd", "")
-    transcript_path = hook_input.get("transcript_path", "")
-    agent_id = hook_input.get("agent_id", "")
-    agent_type = hook_input.get("agent_type", "")
+    session_id: str = hook_input.get("session_id", "")
+    hook_event: str = hook_input.get("hook_event_name", "")
+    cwd: str = hook_input.get("cwd", "")
+    transcript_path: str = hook_input.get("transcript_path", "")
+    agent_id: str = hook_input.get("agent_id", "")
+    agent_type: str = hook_input.get("agent_type", "")
     claude_pid = os.getppid()
 
     if not session_id:
@@ -47,17 +133,37 @@ def main():
 
     if hook_event == "SessionStart":
         handle_session_start(
-            state_file, transcript_path, session_id, cwd, project_name, now, claude_pid
+            state_file,
+            transcript_path,
+            session_id,
+            cwd,
+            project_name,
+            now,
+            claude_pid,
         )
+    elif hook_event == "PreToolUse":
+        handle_pre_tool_use(state_file, now)
     elif hook_event == "PostToolUse":
         handle_post_tool_use(
-            state_file, transcript_path, session_id, cwd, project_name, now, claude_pid
+            state_file,
+            transcript_path,
+            session_id,
+            cwd,
+            project_name,
+            now,
+            claude_pid,
         )
     elif hook_event == "Stop":
         handle_stop(state_file, transcript_path, now)
     elif hook_event == "UserPromptSubmit":
         handle_user_prompt_submit(
-            state_file, transcript_path, session_id, cwd, project_name, now, claude_pid
+            state_file,
+            transcript_path,
+            session_id,
+            cwd,
+            project_name,
+            now,
+            claude_pid,
         )
     elif hook_event == "Notification":
         handle_notification(state_file, notification_subtype, now)
@@ -76,25 +182,12 @@ def main():
 # --- Transcript reading ---
 
 
-def read_transcript_data(transcript_path: str, state_file: Path) -> dict:
+def read_transcript_data(transcript_path: str, state_file: Path) -> JsonDict:
     """Extract session data from the last JSONL entry with usage info."""
     if not transcript_path or not os.path.isfile(transcript_path):
         return {}
 
-    # Read existing state for running cost totals
-    prev_cost = 0.0
-    prev_input = 0
-    prev_output = 0
-    if state_file.is_file():
-        try:
-            prev = json.loads(state_file.read_text())
-            prev_cost = prev.get("cost_usd", 0.0) or 0.0
-            prev_input = prev.get("input_tokens", 0) or 0
-            prev_output = prev.get("output_tokens", 0) or 0
-        except Exception:
-            pass
-
-    result = {}
+    result: JsonDict = {}
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, 2)
@@ -131,40 +224,10 @@ def read_transcript_data(transcript_path: str, state_file: Path) -> dict:
             cache_create = usage.get("cache_creation_input_tokens", 0) or 0
             cache_read = usage.get("cache_read_input_tokens", 0) or 0
 
-            # Context % — total tokens relative to model's context window
-            model = result.get("model", "")
-            ctx_window = 200000  # default
-            for key in ("opus", "sonnet", "haiku"):
-                if key in model:
-                    ctx_window = 200000
-                    break
-
             context_used = input_tok + cache_create + cache_read + output_tok
+            model = result.get("model", "")
+            ctx_window = get_context_window(model)
             result["context_pct"] = round(context_used / ctx_window * 100, 1)
-
-            # Pricing per token
-            if "opus" in model:
-                rates = (15e-6, 75e-6, 18.75e-6, 1.5e-6)
-            elif "haiku" in model:
-                rates = (0.25e-6, 1.25e-6, 0.30e-6, 0.025e-6)
-            else:  # sonnet or unknown
-                rates = (3e-6, 15e-6, 3.75e-6, 0.30e-6)
-
-            msg_cost = (
-                input_tok * rates[0]
-                + output_tok * rates[1]
-                + cache_create * rates[2]
-                + cache_read * rates[3]
-            )
-
-            # Running total — only increment if tokens changed (avoid double-counting)
-            if input_tok != prev_input or output_tok != prev_output:
-                result["cost_usd"] = round(prev_cost + msg_cost, 4)
-            else:
-                result["cost_usd"] = prev_cost
-
-            result["input_tokens"] = input_tok
-            result["output_tokens"] = output_tok
 
     except Exception:
         pass
@@ -178,14 +241,11 @@ TRANSCRIPT_KEYS = (
     "model",
     "git_branch",
     "slug",
-    "cost_usd",
     "context_pct",
-    "input_tokens",
-    "output_tokens",
 )
 
 
-def read_state(state_file: Path) -> Optional[dict]:
+def read_state(state_file: Path) -> JsonDict | None:
     if not state_file.is_file():
         return None
     try:
@@ -194,17 +254,22 @@ def read_state(state_file: Path) -> Optional[dict]:
         return None
 
 
-def write_state(state_file: Path, state: dict):
-    state_file.write_text(json.dumps(state, indent=2))
+def write_state(state_file: Path, state: JsonDict) -> None:
+    # Write atomically via temp file + rename to trigger DispatchSource directory events
+    tmp = state_file.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.rename(state_file)
 
 
-def merge_transcript_data(state: dict, transcript_data: dict):
+def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
     for key in TRANSCRIPT_KEYS:
         if key in transcript_data and transcript_data[key] is not None:
             state[key] = transcript_data[key]
 
 
-def make_base_state(session_id, cwd, project_name, now, claude_pid) -> dict:
+def make_base_state(
+    session_id: str, cwd: str, project_name: str, now: str, claude_pid: int
+) -> JsonDict:
     return {
         "session_id": session_id,
         "cwd": cwd,
@@ -221,8 +286,14 @@ def make_base_state(session_id, cwd, project_name, now, claude_pid) -> dict:
 
 
 def handle_session_start(
-    state_file, transcript_path, session_id, cwd, project_name, now, claude_pid
-):
+    state_file: Path,
+    transcript_path: str,
+    session_id: str,
+    cwd: str,
+    project_name: str,
+    now: str,
+    claude_pid: int,
+) -> None:
     data = read_transcript_data(
         transcript_path, Path("/dev/null")
     )  # no prev state for new session
@@ -234,10 +305,7 @@ def handle_session_start(
         "model": data.get("model"),
         "git_branch": data.get("git_branch"),
         "slug": data.get("slug"),
-        "cost_usd": 0.0,
         "context_pct": data.get("context_pct"),
-        "input_tokens": 0,
-        "output_tokens": 0,
         "started_at": now,
         "updated_at": now,
         "pid": claude_pid,
@@ -247,8 +315,14 @@ def handle_session_start(
 
 
 def handle_post_tool_use(
-    state_file, transcript_path, session_id, cwd, project_name, now, claude_pid
-):
+    state_file: Path,
+    transcript_path: str,
+    session_id: str,
+    cwd: str,
+    project_name: str,
+    now: str,
+    claude_pid: int,
+) -> None:
     data = read_transcript_data(transcript_path, state_file)
     state = read_state(state_file)
     if state is None:
@@ -259,7 +333,7 @@ def handle_post_tool_use(
     write_state(state_file, state)
 
 
-def handle_stop(state_file, transcript_path, now):
+def handle_stop(state_file: Path, transcript_path: str, now: str) -> None:
     state = read_state(state_file)
     if state is None:
         return
@@ -271,8 +345,14 @@ def handle_stop(state_file, transcript_path, now):
 
 
 def handle_user_prompt_submit(
-    state_file, transcript_path, session_id, cwd, project_name, now, claude_pid
-):
+    state_file: Path,
+    transcript_path: str,
+    session_id: str,
+    cwd: str,
+    project_name: str,
+    now: str,
+    claude_pid: int,
+) -> None:
     data = read_transcript_data(transcript_path, state_file)
     state = read_state(state_file)
     if state is None:
@@ -283,7 +363,17 @@ def handle_user_prompt_submit(
     write_state(state_file, state)
 
 
-def handle_notification(state_file, notification_subtype, now):
+def handle_pre_tool_use(state_file: Path, now: str) -> None:
+    """Tool is about to run (user approved) — mark as working immediately."""
+    state = read_state(state_file)
+    if state is None:
+        return
+    state["status"] = "working"
+    state["updated_at"] = now
+    write_state(state_file, state)
+
+
+def handle_notification(state_file: Path, notification_subtype: str, now: str) -> None:
     state = read_state(state_file)
     if state is None:
         return
@@ -295,7 +385,7 @@ def handle_notification(state_file, notification_subtype, now):
     write_state(state_file, state)
 
 
-def handle_permission_request(state_file, now):
+def handle_permission_request(state_file: Path, now: str) -> None:
     state = read_state(state_file)
     if state is None:
         return
@@ -304,7 +394,9 @@ def handle_permission_request(state_file, now):
     write_state(state_file, state)
 
 
-def handle_subagent_start(state_file, agent_id, agent_type, now):
+def handle_subagent_start(
+    state_file: Path, agent_id: str, agent_type: str, now: str
+) -> None:
     if not agent_id:
         return
     state = read_state(state_file)
@@ -324,7 +416,7 @@ def handle_subagent_start(state_file, agent_id, agent_type, now):
     write_state(state_file, state)
 
 
-def handle_subagent_stop(state_file, agent_id, now):
+def handle_subagent_stop(state_file: Path, agent_id: str, now: str) -> None:
     if not agent_id:
         return
     state = read_state(state_file)

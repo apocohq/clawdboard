@@ -13,6 +13,10 @@ public class AppState {
 
     public var remoteHosts: [RemoteHost] = []
 
+    // MARK: - Usage Limits (Claude API)
+
+    public var usageLimits: UsageLimitsData?
+
     // MARK: - UI State
 
     public var expandedSessionId: String?
@@ -21,6 +25,7 @@ public class AppState {
 
     private var stateWatcher: SessionStateWatcher?
     private var remoteWatcher: RemoteSessionWatcher?
+    private var usageLimitsWatcher: UsageLimitsWatcher?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -44,6 +49,7 @@ public class AppState {
         stateWatcher?.start()
 
         startRemoteWatcher()
+        startUsageLimitsWatcher()
     }
 
     public func stop() {
@@ -51,6 +57,8 @@ public class AppState {
         stateWatcher = nil
         remoteWatcher?.stop()
         remoteWatcher = nil
+        usageLimitsWatcher?.stop()
+        usageLimitsWatcher = nil
     }
 
     // MARK: - Remote Host Management
@@ -69,7 +77,6 @@ public class AppState {
         let oldId = remoteHosts[index].host
         remoteHosts[index] = host
 
-        // If host identifier changed, clear old sessions
         if oldId != host.host {
             remoteSessions.removeValue(forKey: oldId)
         }
@@ -114,6 +121,21 @@ public class AppState {
         remoteWatcher?.updateHosts(remoteHosts)
     }
 
+    // MARK: - Usage Limits Watcher
+
+    private func startUsageLimitsWatcher() {
+        guard usageLimitsWatcher == nil else { return }
+        usageLimitsWatcher = UsageLimitsWatcher { [weak self] data in
+            self?.usageLimits = data
+        }
+        usageLimitsWatcher?.start()
+    }
+
+    /// Manually refresh usage limits.
+    public func refreshUsageLimits() {
+        usageLimitsWatcher?.refresh()
+    }
+
     // MARK: - Session Merging
 
     private func rebuildSessions() {
@@ -140,17 +162,14 @@ public class AppState {
         // Ghost session filter: no model means the session never produced output
         if s.model == nil {
             if let started = s.startedAt, let updated = s.updatedAt {
-                // Never received a second hook event (updatedAt ≈ startedAt)
                 let neverUpdated = abs(updated.timeIntervalSince(started)) < 1.0
                 if neverUpdated, now.timeIntervalSince(started) > 30 {
                     return nil
                 }
-                // Even with updates, 5+ min with no model data is a dead session
                 if now.timeIntervalSince(updated) > 300 {
                     return nil
                 }
             }
-            // No timestamps at all — skip after 60s
             guard let started = s.startedAt, now.timeIntervalSince(started) < 60 else {
                 return nil
             }
@@ -164,7 +183,6 @@ public class AppState {
             if s.status == .working, age >= 15.0 {
                 s.status = .waiting
             }
-            // Long-idle sessions become abandoned
             if s.status == .waiting, age >= 600.0 {
                 s.status = .abandoned
             }
@@ -180,7 +198,6 @@ public class AppState {
             let aOrder = a.displayStatus.sortOrder
             let bOrder = b.displayStatus.sortOrder
             if aOrder != bOrder { return aOrder < bOrder }
-            // Within same status, sort by most recently updated
             return (a.updatedAt ?? .distantPast) > (b.updatedAt ?? .distantPast)
         }
     }
@@ -192,28 +209,16 @@ public class AppState {
         }
     }
 
-    /// Number of sessions needing permission approval (most urgent)
     public var needsApprovalCount: Int {
         sessions.count { $0.displayStatus == .needsApproval }
     }
 
-    /// Number of sessions waiting for user input
     public var waitingCount: Int {
         sessions.count { $0.displayStatus == .waiting }
     }
 
-    /// Number of sessions actively working
     public var workingCount: Int {
         sessions.count { $0.displayStatus == .working }
-    }
-
-    /// Total cost across all sessions
-    public var totalCost: Double {
-        sessions.compactMap(\.costUsd).reduce(0, +)
-    }
-
-    public var formattedTotalCost: String {
-        String(format: "$%.2f", totalCost)
     }
 
     // MARK: - Actions

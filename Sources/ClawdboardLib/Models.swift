@@ -200,10 +200,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     public var model: String?
     public var gitBranch: String?
     public var slug: String?
-    public var costUsd: Double?
     public var contextPct: Double?
-    public var inputTokens: Int?
-    public var outputTokens: Int?
     public var startedAt: Date?
     public var updatedAt: Date?
 
@@ -227,10 +224,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case model
         case gitBranch = "git_branch"
         case slug
-        case costUsd = "cost_usd"
         case contextPct = "context_pct"
-        case inputTokens = "input_tokens"
-        case outputTokens = "output_tokens"
         case startedAt = "started_at"
         case updatedAt = "updated_at"
         case subagents
@@ -247,10 +241,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         model: String? = nil,
         gitBranch: String? = nil,
         slug: String? = nil,
-        costUsd: Double? = nil,
         contextPct: Double? = nil,
-        inputTokens: Int? = nil,
-        outputTokens: Int? = nil,
         startedAt: Date? = nil,
         updatedAt: Date? = nil,
         subagents: [Subagent]? = nil,
@@ -265,22 +256,13 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.model = model
         self.gitBranch = gitBranch
         self.slug = slug
-        self.costUsd = costUsd
         self.contextPct = contextPct
-        self.inputTokens = inputTokens
-        self.outputTokens = outputTokens
         self.startedAt = startedAt
         self.updatedAt = updatedAt
         self.subagents = subagents
         self.pid = pid
         self.isHookTracked = isHookTracked
         self.remoteHost = remoteHost
-    }
-
-    /// Formatted cost string like "$1.47"
-    public var formattedCost: String {
-        guard let cost = costUsd else { return "—" }
-        return String(format: "$%.2f", cost)
     }
 
     /// Formatted context usage like "68%"
@@ -324,5 +306,60 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         }
         let hours = minutes / 60
         return "\(hours)h ago"
+    }
+}
+
+// MARK: - Usage Limits (Claude API)
+
+/// Raw API response from /api/oauth/usage.
+struct UsageLimitsResponse: Codable {
+    let fiveHour: LimitWindowResponse
+    let sevenDay: LimitWindowResponse
+
+    enum CodingKeys: String, CodingKey {
+        case fiveHour = "five_hour"
+        case sevenDay = "seven_day"
+    }
+}
+
+struct LimitWindowResponse: Codable {
+    let utilization: Double
+    let resetsAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case utilization
+        case resetsAt = "resets_at"
+    }
+}
+
+/// Processed usage limits with calculated metrics for both windows.
+public struct UsageLimitsData: Equatable {
+    public let fiveHour: UsageLimitWindow
+    public let sevenDay: UsageLimitWindow
+    public let updatedAt: Date
+}
+
+/// A single usage limit window (5-hour or 7-day) with all display metrics.
+public struct UsageLimitWindow: Equatable {
+    /// Current utilization percentage from the API (0–100+).
+    public let utilization: Double
+    /// Average usage: what % of the window has elapsed (ideal constant rate).
+    public let average: Double
+    /// Estimated usage at end of window if current trend continues.
+    public let estimated: Double
+    /// When this window resets.
+    public let resetsAt: Date
+    /// Seconds until reset.
+    public let remainingSeconds: TimeInterval
+
+    /// Formatted remaining time like "2h 15m" or "1d 3h".
+    public var remainingText: String {
+        let total = Int(max(remainingSeconds, 0))
+        let days = total / 86400
+        let hours = (total % 86400) / 3600
+        let minutes = (total % 3600) / 60
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(minutes)m"
     }
 }

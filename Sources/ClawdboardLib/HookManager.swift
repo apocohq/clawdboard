@@ -25,7 +25,7 @@ public class HookManager {
 
     /// All hook events we register for. Claude Code requires each as a separate key.
     private static let hookEvents: [String] = [
-        "SessionStart", "PostToolUse", "PermissionRequest", "Stop",
+        "SessionStart", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop",
         "UserPromptSubmit", "SessionEnd", "SubagentStart", "SubagentStop",
     ]
 

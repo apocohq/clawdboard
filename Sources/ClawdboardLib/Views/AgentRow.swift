@@ -61,8 +61,6 @@ public struct AgentRow: View {
 
                 if session.isHookTracked {
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text(session.formattedCost)
-                            .font(.caption.monospacedDigit())
                         Text(session.formattedContext)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -117,7 +115,6 @@ public struct AgentRow: View {
             }
             DetailRow("Model", session.model ?? "—")
             DetailRow("Branch", session.gitBranch ?? "—")
-            DetailRow("Cost", session.formattedCost)
             DetailRow("Session", session.slug ?? session.sessionId)
             DetailRow("Uptime", session.elapsedTime)
             DetailRow("Path", session.cwd)

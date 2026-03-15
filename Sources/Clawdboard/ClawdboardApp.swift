@@ -94,6 +94,19 @@ struct ClawdboardApp: App {
 struct MenuBarLabel: View {
     let appState: AppState
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
+    @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
+
+    /// Usage fill percentage (0–100) from the 5-hour usage limit, nil if unavailable.
+    private var usagePct: CGFloat? {
+        guard let limits = appState.usageLimits else { return nil }
+        return CGFloat(limits.fiveHour.utilization)
+    }
+
+    /// Whether the usage ring should be shown (above threshold).
+    private var showRing: Bool {
+        guard let pct = usagePct else { return false }
+        return pct >= CGFloat(usageRingThreshold)
+    }
 
     var body: some View {
         let approval = appState.needsApprovalCount
@@ -101,22 +114,95 @@ struct MenuBarLabel: View {
         let working = appState.workingCount
 
         if approval == 0 && waiting == 0 && working == 0 {
-            Image(systemName: "terminal")
-        } else {
-            if let image = Self.renderStatusImage(
-                approval: approval, waiting: waiting, working: working,
-                useRedYellowMode: useRedYellowMode
-            ) {
-                Image(nsImage: image)
+            if showRing, let pct = usagePct,
+                let img = Self.renderRingOnly(pct: pct)
+            {
+                Image(nsImage: img)
+            } else {
+                Image(systemName: "terminal")
             }
+        } else if let image = Self.renderStatusImage(
+            approval: approval, waiting: waiting, working: working,
+            useRedYellowMode: useRedYellowMode,
+            usagePct: showRing ? usagePct : nil
+        ) {
+            Image(nsImage: image)
         }
+    }
+
+    // MARK: - Ring Drawing
+
+    /// Draw a circular progress ring into the current graphics context.
+    /// Uses the provided foreground color for the arc and a faded version for the track.
+    private static func drawRing(
+        center: NSPoint, radius: CGFloat, lineWidth: CGFloat, pct: CGFloat,
+        color: NSColor = .black
+    ) {
+        let track = NSBezierPath()
+        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+        color.withAlphaComponent(0.2).setStroke()
+        track.lineWidth = lineWidth
+        track.stroke()
+
+        if pct > 0 {
+            let endAngle: CGFloat = 90 - (min(pct, 100) / 100) * 360
+            let arc = NSBezierPath()
+            arc.appendArc(
+                withCenter: center, radius: radius,
+                startAngle: 90, endAngle: endAngle, clockwise: true
+            )
+            color.setStroke()
+            arc.lineWidth = lineWidth
+            arc.lineCapStyle = .round
+            arc.stroke()
+        }
+    }
+
+    /// Create a bitmap rep for menu bar rendering at Retina scale.
+    private static func makeMenuBarRep(size: NSSize) -> (NSBitmapImageRep, NSSize) {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let pixelSize = NSSize(width: size.width * scale, height: size.height * scale)
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(pixelSize.width),
+            pixelsHigh: Int(pixelSize.height),
+            bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0
+        )!
+        rep.size = size
+        return (rep, size)
+    }
+
+    /// Render a standalone usage ring for idle state. Always template.
+    private static func renderRingOnly(pct: CGFloat) -> NSImage? {
+        let menuBarHeight = NSStatusBar.system.thickness
+        let ringDiameter: CGFloat = 14
+        let imageSize = NSSize(width: ringDiameter, height: menuBarHeight)
+
+        let (rep, _) = makeMenuBarRep(size: imageSize)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+
+        drawRing(
+            center: NSPoint(x: ringDiameter / 2, y: menuBarHeight / 2),
+            radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct
+        )
+
+        NSGraphicsContext.restoreGraphicsState()
+        let image = NSImage(size: imageSize)
+        image.addRepresentation(rep)
+        image.isTemplate = true
+        return image
     }
 
     /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
     /// Pill background color depends on state and user's color mode preference.
     private static func renderStatusImage(
         approval: Int, waiting: Int, working: Int,
-        useRedYellowMode: Bool
+        useRedYellowMode: Bool,
+        usagePct: CGFloat? = nil
     ) -> NSImage? {
         var segments: [(symbol: String, count: Int)] = []
         if approval > 0 {
@@ -150,11 +236,18 @@ struct MenuBarLabel: View {
         }
 
         let hasPill = pillColor != nil
-        let foreground: NSColor = hasPill ? (needsDarkText ? .black : .white) : .controlTextColor
-        let dotForeground: NSColor =
-            hasPill
-            ? (needsDarkText ? .black.withAlphaComponent(0.5) : .white.withAlphaComponent(0.7))
-            : .secondaryLabelColor
+        let foreground: NSColor
+        let dotForeground: NSColor
+        if hasPill {
+            foreground = needsDarkText ? .black : .white
+            dotForeground =
+                needsDarkText
+                ? .black.withAlphaComponent(0.5) : .white.withAlphaComponent(0.7)
+        } else {
+            // Template mode: draw in black, macOS adapts to menu bar
+            foreground = .black
+            dotForeground = .gray
+        }
 
         let font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
@@ -203,31 +296,24 @@ struct MenuBarLabel: View {
         let textSize = result.size()
         let hPad: CGFloat = hasPill ? 4.0 : 0
         let menuBarHeight = NSStatusBar.system.thickness
+
+        let ringDiameter: CGFloat = 14
+        let ringSpacing: CGFloat = 4
+        let hasRing = usagePct != nil
+        let ringPadRight: CGFloat = (hasRing && hasPill) ? hPad : 0
+        let ringExtra: CGFloat = hasRing ? (ringSpacing + ringDiameter + ringPadRight) : 0
+
         let imageSize = NSSize(
-            width: ceil(textSize.width) + hPad * 2,
+            width: ceil(textSize.width) + hPad * 2 + ringExtra,
             height: menuBarHeight
         )
-        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
-        let pixelSize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
-
-        let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: Int(pixelSize.width),
-            pixelsHigh: Int(pixelSize.height),
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        )!
-        rep.size = imageSize
+        let (rep, _) = makeMenuBarRep(size: imageSize)
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 
         if let color = pillColor {
+            // Pill covers everything including the ring
             let pillRect = NSRect(origin: .zero, size: imageSize)
             let path = NSBezierPath(roundedRect: pillRect, xRadius: 4, yRadius: 4)
             color.setFill()
@@ -237,10 +323,24 @@ struct MenuBarLabel: View {
         let textY = (imageSize.height - textSize.height) / 2
         result.draw(at: NSPoint(x: hPad, y: textY))
 
+        // Ring after the pill
+        if let pct = usagePct {
+            let pillWidth = ceil(textSize.width) + hPad * 2
+            drawRing(
+                center: NSPoint(
+                    x: pillWidth + ringSpacing + ringDiameter / 2,
+                    y: menuBarHeight / 2
+                ),
+                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct,
+                color: foreground
+            )
+        }
+
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: imageSize)
         image.addRepresentation(rep)
+        // Template when no pill — ring is black so it adapts too
         image.isTemplate = !hasPill
         return image
     }
