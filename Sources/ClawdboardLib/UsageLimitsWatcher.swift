@@ -94,10 +94,20 @@ public class UsageLimitsWatcher {
         }
         guard
             let jsonData = jsonString.data(using: .utf8),
-            let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-            let token = json["accessToken"] as? String, !token.isEmpty
+            let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
         else {
             NSLog("[UsageLimits] Keychain: could not parse output: \(jsonString.prefix(200))")
+            return nil
+        }
+        // Keychain stores same structure as credentials file: {claudeAiOauth: {accessToken: ...}}
+        let token: String?
+        if let oauth = json["claudeAiOauth"] as? [String: Any] {
+            token = oauth["accessToken"] as? String
+        } else {
+            token = json["accessToken"] as? String
+        }
+        guard let token, !token.isEmpty else {
+            NSLog("[UsageLimits] Keychain: no accessToken in JSON")
             return nil
         }
         return token
