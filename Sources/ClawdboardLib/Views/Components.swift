@@ -84,17 +84,57 @@ public struct ContextBar: View {
 /// with ring gauges, utilization, average, estimated, and reset time.
 public struct UsageLimitsView: View {
     public let limits: UsageLimitsData
+    public var error: String?
+    public var onRefresh: (() -> Void)?
 
-    public init(limits: UsageLimitsData) {
+    public init(limits: UsageLimitsData, error: String? = nil, onRefresh: (() -> Void)? = nil) {
         self.limits = limits
+        self.error = error
+        self.onRefresh = onRefresh
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            UsageWindowView(label: "5h", window: limits.fiveHour)
-            Divider().frame(height: 40)
-            UsageWindowView(label: "7d", window: limits.sevenDay)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                UsageWindowView(label: "5h", window: limits.fiveHour)
+                Divider().frame(height: 40)
+                UsageWindowView(label: "7d", window: limits.sevenDay)
+            }
+
+            HStack(spacing: 4) {
+                Text("Updated \(updatedText)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                if let onRefresh {
+                    Button(action: onRefresh) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let error {
+                    Spacer()
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
         }
+    }
+
+    private var updatedText: String {
+        let interval = Date().timeIntervalSince(limits.updatedAt)
+        if interval < 5 { return "just now" }
+        if interval < 60 { return "\(Int(interval))s ago" }
+        let minutes = Int(interval / 60)
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        return "\(hours)h ago"
     }
 }
 

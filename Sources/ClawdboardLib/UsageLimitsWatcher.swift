@@ -14,9 +14,14 @@ public class UsageLimitsWatcher {
 
     private var timer: Timer?
     private let onChange: (UsageLimitsData?) -> Void
+    private let onError: (String?) -> Void
 
-    public init(onChange: @escaping (UsageLimitsData?) -> Void) {
+    public init(
+        onChange: @escaping (UsageLimitsData?) -> Void,
+        onError: @escaping (String?) -> Void = { _ in }
+    ) {
         self.onChange = onChange
+        self.onError = onError
     }
 
     public func start() {
@@ -178,6 +183,7 @@ public class UsageLimitsWatcher {
             guard let token = Self.readAccessToken() else {
                 NSLog("[UsageLimits] No access token found in credentials file")
                 DispatchQueue.main.async {
+                    self.onError("No OAuth token found. Sign in to claude.ai.")
                     // Still serve cached data if available
                     self.onChange(Self.loadCache())
                 }
@@ -194,8 +200,10 @@ public class UsageLimitsWatcher {
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error {
                     NSLog("[UsageLimits] Network error: \(error.localizedDescription)")
-                    // Serve cached data on network error
-                    DispatchQueue.main.async { self.onChange(Self.loadCache()) }
+                    DispatchQueue.main.async {
+                        self.onError("Network error: \(error.localizedDescription)")
+                        self.onChange(Self.loadCache())
+                    }
                     return
                 }
                 guard let httpResp = response as? HTTPURLResponse,
@@ -206,7 +214,10 @@ public class UsageLimitsWatcher {
                     if let data = data, let body = String(data: data, encoding: .utf8) {
                         NSLog("[UsageLimits] Body: \(body.prefix(200))")
                     }
-                    DispatchQueue.main.async { self.onChange(Self.loadCache()) }
+                    DispatchQueue.main.async {
+                        self.onError("API error (HTTP \(status))")
+                        self.onChange(Self.loadCache())
+                    }
                     return
                 }
 
@@ -230,10 +241,16 @@ public class UsageLimitsWatcher {
                         ),
                         updatedAt: now
                     )
-                    DispatchQueue.main.async { self.onChange(result) }
+                    DispatchQueue.main.async {
+                        self.onError(nil)
+                        self.onChange(result)
+                    }
                 } catch {
                     NSLog("[UsageLimits] Decode error: \(error)")
-                    DispatchQueue.main.async { self.onChange(Self.loadCache()) }
+                    DispatchQueue.main.async {
+                        self.onError("Failed to decode API response")
+                        self.onChange(Self.loadCache())
+                    }
                 }
             }
             task.resume()

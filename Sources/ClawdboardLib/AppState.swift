@@ -16,6 +16,7 @@ public class AppState {
     // MARK: - Usage Limits (Claude API)
 
     public var usageLimits: UsageLimitsData?
+    public var usageLimitsError: String?
 
     // MARK: - UI State
 
@@ -125,9 +126,14 @@ public class AppState {
 
     private func startUsageLimitsWatcher() {
         guard usageLimitsWatcher == nil else { return }
-        usageLimitsWatcher = UsageLimitsWatcher { [weak self] data in
-            self?.usageLimits = data
-        }
+        usageLimitsWatcher = UsageLimitsWatcher(
+            onChange: { [weak self] data in
+                self?.usageLimits = data
+            },
+            onError: { [weak self] error in
+                self?.usageLimitsError = error
+            }
+        )
         usageLimitsWatcher?.start()
     }
 
