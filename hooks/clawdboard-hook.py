@@ -174,7 +174,7 @@ def main() -> None:
         )
     elif hook_event == "PreToolUse":
         handle_pre_tool_use(state_file, now)
-    elif hook_event == "PostToolUse":
+    elif hook_event == "PostToolUse" or hook_event == "PostToolUseFailure":
         handle_post_tool_use(
             state_file,
             transcript_path,
@@ -418,7 +418,13 @@ def handle_notification(state_file: Path, notification_subtype: str, now: str) -
     if notification_subtype == "permission_prompt":
         state["status"] = "needs_approval"
     else:
-        state["status"] = "waiting"
+        # idle_prompt is async and can arrive after UserPromptSubmit has
+        # already set the session back to "working". Never clobber working.
+        if state.get("status") == "working":
+            return
+        # Use pending_waiting to go through the same debounce as Stop,
+        # rather than jumping straight to "waiting".
+        state["status"] = "pending_waiting"
     state["updated_at"] = now
     write_state(state_file, state)
 
