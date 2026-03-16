@@ -50,4 +50,4 @@ jobs:
       - run: mise run test 2>&1 | tee /tmp/output.txt; exit ${PIPESTATUS[0]}
       - if: failure()
         run: |
-          tail -80 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
+          tail -200 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
