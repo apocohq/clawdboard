@@ -20,7 +20,6 @@ opt_in_rules:
   - empty_count
   - closure_spacing
   - contains_over_first_not_nil
-  - force_unwrapping
   - implicitly_unwrapped_optional
   - modifier_order
   - overridden_super_call

@@ -352,7 +352,7 @@ struct MenuBarLabel: View {
             hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB,
             bytesPerRow: 0, bitsPerPixel: 0
-        )! // swiftlint:disable:this force_unwrapping
+        )!
         rep.size = size
         return (rep, size)
     }

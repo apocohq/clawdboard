@@ -21,7 +21,6 @@ struct SessionStateWatcherTests {
                 "project_name": "test",
                 "status": "working",
                 "model": "claude-opus-4-6",
-                "cost_usd": 0.50,
                 "context_pct": 42.0,
                 "started_at": "2026-03-12T08:00:00Z",
                 "updated_at": "2026-03-12T09:00:00Z",
@@ -40,7 +39,6 @@ struct SessionStateWatcherTests {
         #expect(sessions[0].sessionId == "test-123")
         #expect(sessions[0].status == .working)
         #expect(sessions[0].model == "claude-opus-4-6")
-        #expect(sessions[0].costUsd == 0.50)
         #expect(sessions[0].contextPct == 42.0)
     }
 

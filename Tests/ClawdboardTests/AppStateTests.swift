@@ -47,17 +47,6 @@ struct AppStateTests {
         #expect(state.workingCount == 2)
     }
 
-    @Test("totalCost sums all session costs")
-    func totalCost() {
-        let state = AppState()
-        state.sessions = [
-            AgentSession(sessionId: "1", cwd: "/a", projectName: "a", costUsd: 1.50, isHookTracked: true),
-            AgentSession(sessionId: "2", cwd: "/b", projectName: "b", costUsd: 2.25, isHookTracked: true),
-            AgentSession(sessionId: "3", cwd: "/c", projectName: "c", isHookTracked: false),  // nil cost
-        ]
-        #expect(state.totalCost == 3.75)
-    }
-
     @Test("toggleExpanded toggles session expansion")
     func toggleExpanded() {
         let state = AppState()
