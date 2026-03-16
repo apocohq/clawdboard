@@ -7,6 +7,8 @@ and writes/updates a state file in ~/.clawdboard/sessions/.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -299,22 +301,19 @@ FIREBASE_PROJECT = "clawdboard-cloud"
 
 
 def push_to_cloud(state: JsonDict) -> None:
-    """Encrypt session state with ECIES and push to Firestore if CLAWDBOARD_KEY is set."""
+    """Encrypt session state with ECIES and push to Firestore."""
     public_key_b64 = os.environ.get("CLAWDBOARD_KEY", "")
     if not public_key_b64:
         return
 
     try:
-        import base64
-        import hashlib
-
         from cryptography.hazmat.primitives.asymmetric.x25519 import (
             X25519PrivateKey,
             X25519PublicKey,
         )
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
         from cryptography.hazmat.primitives.hashes import SHA256
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
         public_key_bytes = base64.b64decode(public_key_b64)
         public_key = X25519PublicKey.from_public_bytes(public_key_bytes)
@@ -361,8 +360,9 @@ def push_to_cloud(state: JsonDict) -> None:
     except ImportError:
         with open(LOG_FILE, "a") as lf:
             lf.write(
-                f"[cloud] CLAWDBOARD_KEY set but 'cryptography' package not installed — "
-                f"cloud push skipped. Run: pip install cryptography\n"
+                "[cloud] CLAWDBOARD_KEY set but 'cryptography' package"
+                " not installed — cloud push skipped."
+                " Run: pip install cryptography\n"
             )
     except Exception as exc:
         with open(LOG_FILE, "a") as lf:
@@ -376,9 +376,6 @@ def delete_from_cloud(session_id: str) -> None:
         return
 
     try:
-        import base64
-        import hashlib
-
         public_key_bytes = base64.b64decode(public_key_b64)
         channel_id = hashlib.sha256(public_key_bytes).hexdigest()[:16]
 

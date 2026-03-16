@@ -20,6 +20,10 @@ select = ["E", "F", "I", "W", "ANN"]
 [tool.ruff.lint.per-file-ignores]
 "Tests/**" = ["ANN"]  # Don't require annotations in tests
 
+[tool.ty.analysis]
+# cryptography is an optional runtime dependency (only needed for cloud push)
+allowed-unresolved-imports = ["cryptography.**"]
+
 [tool.pytest.ini_options]
 testpaths = ["Tests/python"]
 pythonpath = ["hooks"]
