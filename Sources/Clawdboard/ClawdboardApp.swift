@@ -63,13 +63,21 @@ struct ClawdboardApp: App {
         state.start()
         return state
     }()
-
     var body: some Scene {
+        Window("Clawdboard", id: "main") {
+            PanelView()
+                .environment(appState)
+                .background(WindowConfigurator())
+        }
+        .defaultSize(width: 420, height: 520)
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
+
         MenuBarExtra {
             PanelView()
                 .environment(appState)
         } label: {
-            MenuBarLabel(appState: appState)
+            MenuBarLabelWithLauncher(appState: appState)
         }
         .menuBarExtraStyle(.window)
 
@@ -85,6 +93,57 @@ struct ClawdboardApp: App {
                     }
                 }
         }
+    }
+}
+
+/// Sets the hosting window to float above normal windows so it stays always visible.
+/// Resets the "showFloatingWindow" preference when the window is closed via the X button.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                window.level = .floating
+                window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+                context.coordinator.observe(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject {
+        private var observation: Any?
+
+        func observe(_ window: NSWindow) {
+            observation = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window, queue: .main
+            ) { _ in
+                UserDefaults.standard.set(false, forKey: "showFloatingWindow")
+            }
+        }
+
+        deinit { observation.map(NotificationCenter.default.removeObserver) }
+    }
+}
+
+/// Thin wrapper around MenuBarLabel that optionally opens the floating window at launch.
+struct MenuBarLabelWithLauncher: View {
+    let appState: AppState
+    @AppStorage("showFloatingWindow") private var showFloatingWindow = false
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        MenuBarLabel(appState: appState)
+            .task {
+                if showFloatingWindow {
+                    openWindow(id: "main")
+                }
+            }
     }
 }
 
