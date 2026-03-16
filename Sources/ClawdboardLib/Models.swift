@@ -222,6 +222,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// iTerm2 session UUID, written back by the iTerm2 integration script
     public var iterm2SessionId: String?
 
+    /// Whether this session is from a cloud VM (via Firestore)
+    public var isCloudSession: Bool
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -239,6 +242,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case remoteHost = "remote_host"
         case githubRepo = "github_repo"
         case iterm2SessionId = "iterm2_session_id"
+        case isCloudSession = "is_cloud_session"
     }
 
     public init(
@@ -257,7 +261,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         isHookTracked: Bool = false,
         remoteHost: String? = nil,
         githubRepo: String? = nil,
-        iterm2SessionId: String? = nil
+        iterm2SessionId: String? = nil,
+        isCloudSession: Bool = false
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -275,6 +280,28 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.remoteHost = remoteHost
         self.githubRepo = githubRepo
         self.iterm2SessionId = iterm2SessionId
+        self.isCloudSession = isCloudSession
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try container.decode(String.self, forKey: .sessionId)
+        cwd = try container.decode(String.self, forKey: .cwd)
+        projectName = try container.decode(String.self, forKey: .projectName)
+        status = try container.decode(AgentStatus.self, forKey: .status)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        gitBranch = try container.decodeIfPresent(String.self, forKey: .gitBranch)
+        slug = try container.decodeIfPresent(String.self, forKey: .slug)
+        contextPct = try container.decodeIfPresent(Double.self, forKey: .contextPct)
+        startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        subagents = try container.decodeIfPresent([Subagent].self, forKey: .subagents)
+        pid = try container.decodeIfPresent(Int.self, forKey: .pid)
+        isHookTracked = try container.decodeIfPresent(Bool.self, forKey: .isHookTracked) ?? false
+        remoteHost = try container.decodeIfPresent(String.self, forKey: .remoteHost)
+        githubRepo = try container.decodeIfPresent(String.self, forKey: .githubRepo)
+        iterm2SessionId = try container.decodeIfPresent(String.self, forKey: .iterm2SessionId)
+        isCloudSession = try container.decodeIfPresent(Bool.self, forKey: .isCloudSession) ?? false
     }
 
     /// Formatted context usage like "68%"

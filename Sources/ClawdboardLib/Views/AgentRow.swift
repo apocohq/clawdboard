@@ -31,7 +31,12 @@ public struct AgentRow: View {
                         .lineLimit(1)
 
                     HStack(spacing: 4) {
-                        if let host = session.remoteHost {
+                        if session.isCloudSession {
+                            Image(systemName: "cloud.fill")
+                                .font(.caption2)
+                            Text("Cloud")
+                            Text("·")
+                        } else if let host = session.remoteHost {
                             Image(systemName: "network")
                                 .font(.caption2)
                             Text(host)
@@ -129,7 +134,9 @@ public struct AgentRow: View {
                 }
             }
 
-            if let host = session.remoteHost {
+            if session.isCloudSession {
+                DetailRow("Host", "Cloud VM")
+            } else if let host = session.remoteHost {
                 DetailRow("Host", host)
             }
             DetailRow("Model", session.model ?? "—")

@@ -8,6 +8,13 @@ public struct SettingsView: View {
     @State private var iterm2Installed = false
     @State private var isInstallingITerm2 = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
+    @State private var hasCloudKeypair = false
+    @State private var cloudPublicKey: String = ""
+    @State private var cloudChannelId: String = ""
+    @State private var isGeneratingKeypair = false
+    @State private var showDeleteKeypairConfirm = false
+    @State private var copiedSetupScript = false
+    @State private var copiedPublicKey = false
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
     @Environment(AppState.self) private var appState
@@ -21,12 +28,16 @@ public struct SettingsView: View {
 
             remoteHostsTab
                 .tabItem { Label("Remote Hosts", systemImage: "network") }
+
+            cloudTab
+                .tabItem { Label("Cloud", systemImage: "cloud") }
         }
         .frame(width: 500, height: 400)
         .background(.ultraThinMaterial)
         .onAppear {
             checkHookStatus()
             iterm2Installed = ITerm2Installer.isInstalled
+            refreshCloudKeyState()
         }
     }
 
@@ -217,6 +228,165 @@ public struct SettingsView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+
+    // MARK: - Cloud Tab
+
+    private var cloudTab: some View {
+        Form {
+            Section("Keypair") {
+                if hasCloudKeypair {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Label("Keypair generated", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Spacer()
+                            Button("Delete", role: .destructive) {
+                                showDeleteKeypairConfirm = true
+                            }
+                            .controlSize(.small)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Public Key (set as CLAWDBOARD_KEY env var)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            HStack {
+                                Text(cloudPublicKey)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                                Button(copiedPublicKey ? "Copied!" : "Copy") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(
+                                        cloudPublicKey, forType: .string)
+                                    copiedPublicKey = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        copiedPublicKey = false
+                                    }
+                                }
+                                .controlSize(.small)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Channel ID")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(cloudChannelId)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                    }
+                    .alert("Delete Keypair?", isPresented: $showDeleteKeypairConfirm) {
+                        Button("Cancel", role: .cancel) {}
+                        Button("Delete", role: .destructive) {
+                            KeychainManager.shared.deleteKeypair()
+                            refreshCloudKeyState()
+                            appState.restartCloudWatcher()
+                        }
+                    } message: {
+                        Text(
+                            "Cloud sessions will no longer be monitored. You will need to generate a new keypair and reconfigure cloud VMs."
+                        )
+                    }
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "cloud.fill")
+                            .font(.title2)
+                            .foregroundStyle(.tertiary)
+                        Text("No cloud keypair configured")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(
+                            "Generate a keypair to monitor Claude Code sessions on Anthropic cloud VMs"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+
+                        Button("Generate Keypair") {
+                            generateKeypair()
+                        }
+                        .disabled(isGeneratingKeypair)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+            }
+
+            if hasCloudKeypair {
+                Section("Setup") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("To monitor cloud sessions:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("1. In claude.ai, set environment variable:")
+                                .font(.caption)
+                            Text("CLAWDBOARD_KEY=\(cloudPublicKey)")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("2. Paste the setup script in the Setup Script field:")
+                                .font(.caption)
+                            HStack {
+                                Spacer()
+                                Button(copiedSetupScript ? "Copied!" : "Copy Setup Script") {
+                                    let script = HookManager.cloudSetupScript()
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(script, forType: .string)
+                                    copiedSetupScript = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        copiedSetupScript = false
+                                    }
+                                }
+                                .controlSize(.small)
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+
+                Section("Status") {
+                    let cloudCount = appState.sessions.filter(\.isCloudSession).count
+                    HStack {
+                        Text("Cloud sessions")
+                        Spacer()
+                        Text("\(cloudCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    // MARK: - Cloud Helpers
+
+    private func refreshCloudKeyState() {
+        hasCloudKeypair = KeychainManager.shared.hasKeypair
+        cloudPublicKey = KeychainManager.shared.publicKeyBase64 ?? ""
+        cloudChannelId = KeychainManager.shared.channelId ?? ""
+    }
+
+    private func generateKeypair() {
+        isGeneratingKeypair = true
+        do {
+            try KeychainManager.shared.generateKeypair()
+            refreshCloudKeyState()
+            appState.restartCloudWatcher()
+        } catch {
+            // Keypair generation failed — state will remain as-is
+        }
+        isGeneratingKeypair = false
     }
 
     // MARK: - Helpers

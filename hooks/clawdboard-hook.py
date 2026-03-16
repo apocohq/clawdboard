@@ -200,6 +200,7 @@ def main() -> None:
         handle_notification(state_file, notification_subtype, now)
     elif hook_event == "SessionEnd":
         state_file.unlink(missing_ok=True)
+        delete_from_cloud(session_id)
     elif hook_event == "PermissionRequest":
         handle_permission_request(state_file, now)
     elif hook_event == "SubagentStart":
@@ -290,6 +291,134 @@ def write_state(state_file: Path, state: JsonDict) -> None:
     tmp = state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2))
     tmp.rename(state_file)
+    # Push to cloud if configured
+    push_to_cloud(state)
+
+
+FIREBASE_PROJECT = "clawdboard-cloud"
+
+
+def push_to_cloud(state: JsonDict) -> None:
+    """Encrypt session state with ECIES and push to Firestore if CLAWDBOARD_KEY is set."""
+    public_key_b64 = os.environ.get("CLAWDBOARD_KEY", "")
+    if not public_key_b64:
+        return
+
+    try:
+        import base64
+        import hashlib
+
+        from cryptography.hazmat.primitives.asymmetric.x25519 import (
+            X25519PrivateKey,
+            X25519PublicKey,
+        )
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        from cryptography.hazmat.primitives.hashes import SHA256
+
+        public_key_bytes = base64.b64decode(public_key_b64)
+        public_key = X25519PublicKey.from_public_bytes(public_key_bytes)
+
+        # Channel ID = SHA256(public key)[:16] hex (first 8 bytes = 16 hex chars)
+        channel_id = hashlib.sha256(public_key_bytes).hexdigest()[:16]
+
+        # ECIES encrypt
+        ephemeral_private = X25519PrivateKey.generate()
+        ephemeral_public = ephemeral_private.public_key()
+        shared_secret = ephemeral_private.exchange(public_key)
+
+        # HKDF-SHA256 to derive AES-256-GCM key
+        hkdf = HKDF(
+            algorithm=SHA256(),
+            length=32,
+            salt=None,
+            info=b"clawdboard-ecies",
+        )
+        aes_key = hkdf.derive(shared_secret)
+
+        # AES-256-GCM encrypt
+        plaintext = json.dumps(state).encode("utf-8")
+        nonce = os.urandom(12)
+        aesgcm = AESGCM(aes_key)
+        ciphertext_and_tag = aesgcm.encrypt(nonce, plaintext, None)
+
+        # Blob: ephemeral_pubkey (32B) || nonce (12B) || ciphertext+tag
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            PublicFormat,
+        )
+
+        ephemeral_pub_bytes = ephemeral_public.public_bytes(
+            Encoding.Raw, PublicFormat.Raw
+        )
+        blob = ephemeral_pub_bytes + nonce + ciphertext_and_tag
+        blob_b64 = base64.b64encode(blob).decode("ascii")
+
+        # Push to Firestore via REST API
+        session_id = state.get("session_id", "unknown")
+        _firestore_patch(channel_id, session_id, blob_b64)
+
+    except ImportError:
+        # cryptography package not installed — skip cloud push silently
+        pass
+    except Exception:
+        pass
+
+
+def delete_from_cloud(session_id: str) -> None:
+    """Delete a session document from Firestore if CLAWDBOARD_KEY is set."""
+    public_key_b64 = os.environ.get("CLAWDBOARD_KEY", "")
+    if not public_key_b64:
+        return
+
+    try:
+        import base64
+        import hashlib
+
+        public_key_bytes = base64.b64decode(public_key_b64)
+        channel_id = hashlib.sha256(public_key_bytes).hexdigest()[:16]
+
+        import urllib.request
+
+        url = (
+            f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT}"
+            f"/databases/(default)/documents/channels/{channel_id}/sessions/{session_id}"
+        )
+        req = urllib.request.Request(url, method="DELETE")
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass
+
+
+def _firestore_patch(channel_id: str, session_id: str, blob_b64: str) -> None:
+    """PATCH a document to Firestore REST API."""
+    import urllib.request
+
+    url = (
+        f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT}"
+        f"/databases/(default)/documents/channels/{channel_id}/sessions/{session_id}"
+    )
+
+    # Firestore REST API document format
+    doc = {
+        "fields": {
+            "blob": {"stringValue": blob_b64},
+            "updated_at": {
+                "timestampValue": datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                )
+            },
+        }
+    }
+
+    data = json.dumps(doc).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="PATCH",
+        headers={"Content-Type": "application/json"},
+    )
+    urllib.request.urlopen(req, timeout=5)
 
 
 def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:

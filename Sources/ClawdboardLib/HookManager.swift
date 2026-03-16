@@ -197,6 +197,64 @@ public class HookManager {
         throw HookError.scriptNotFound(filename)
     }
 
+    /// Generate a setup script for cloud VMs that installs hooks with cloud push support.
+    /// This script is pasted into the cloud VM's Setup Script field.
+    public static func cloudSetupScript() -> String {
+        let hookScript: String
+        do {
+            hookScript = try scriptSource("clawdboard-hook.py")
+        } catch {
+            hookScript = "# Error: could not load hook script"
+        }
+
+        return """
+            #!/bin/bash
+            set -e
+
+            # Install Clawdboard hook for cloud session monitoring
+            mkdir -p ~/.clawdboard/hooks ~/.clawdboard/sessions
+
+            # Install the cryptography package for ECIES encryption
+            pip install -q cryptography 2>/dev/null || pip3 install -q cryptography 2>/dev/null || true
+
+            # Write hook script
+            cat > ~/.clawdboard/hooks/clawdboard-hook.py << 'CLAWDBOARD_HOOK_EOF'
+            \(hookScript)
+            CLAWDBOARD_HOOK_EOF
+
+            chmod 755 ~/.clawdboard/hooks/clawdboard-hook.py
+
+            # Merge hooks into Claude Code settings
+            python3 -c "
+            import json, os
+            settings_path = os.path.expanduser('~/.claude/settings.json')
+            os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+            settings = {}
+            if os.path.isfile(settings_path):
+                try:
+                    settings = json.load(open(settings_path))
+                except: pass
+            hooks = settings.get('hooks', {})
+            hook_cmd = 'python3 ~/.clawdboard/hooks/clawdboard-hook.py'
+            events = ['SessionStart','PostToolUse','PermissionRequest','Stop','UserPromptSubmit','SessionEnd','SubagentStart','SubagentStop']
+            for event in events:
+                entries = [e for e in hooks.get(event, []) if not any('clawdboard' in h.get('command','') for h in e.get('hooks',[]))]
+                entries.append({'matcher':'*','hooks':[{'type':'command','command':hook_cmd,'timeout':10}]})
+                hooks[event] = entries
+            notifs = [e for e in hooks.get('Notification', []) if not any('clawdboard' in h.get('command','') for h in e.get('hooks',[]))]
+            for m in ['idle_prompt','permission_prompt']:
+                notifs.append({'matcher':m,'hooks':[{'type':'command','command':hook_cmd+' '+m,'timeout':10}]})
+            hooks['Notification'] = notifs
+            settings['hooks'] = hooks
+            with open(settings_path, 'w') as f:
+                json.dump(settings, f, indent=2, sort_keys=True)
+            print('Clawdboard hooks installed')
+            "
+
+            echo "Clawdboard cloud setup complete"
+            """
+    }
+
     public enum HookError: Error, LocalizedError {
         case scriptNotFound(String)
 

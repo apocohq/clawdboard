@@ -26,10 +26,14 @@ public class AppState {
 
     private var stateWatcher: SessionStateWatcher?
     private var remoteWatcher: RemoteSessionWatcher?
+    private var cloudWatcher: CloudSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
+
+    /// Cloud sessions from Firestore
+    private var cloudSessions: [AgentSession] = []
 
     /// Local sessions from the local watcher
     private var localSessions: [AgentSession] = []
@@ -50,6 +54,7 @@ public class AppState {
         stateWatcher?.start()
 
         startRemoteWatcher()
+        startCloudWatcher()
         startUsageLimitsWatcher()
     }
 
@@ -58,6 +63,8 @@ public class AppState {
         stateWatcher = nil
         remoteWatcher?.stop()
         remoteWatcher = nil
+        cloudWatcher?.stop()
+        cloudWatcher = nil
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
     }
@@ -122,6 +129,26 @@ public class AppState {
         remoteWatcher?.updateHosts(remoteHosts)
     }
 
+    // MARK: - Cloud Watcher
+
+    private func startCloudWatcher() {
+        guard KeychainManager.shared.hasKeypair else { return }
+        cloudWatcher = CloudSessionWatcher { [weak self] sessions in
+            self?.cloudSessions = sessions
+            self?.rebuildSessions()
+        }
+        cloudWatcher?.start()
+    }
+
+    /// Restart cloud watcher (e.g. after keypair generation).
+    public func restartCloudWatcher() {
+        cloudWatcher?.stop()
+        cloudWatcher = nil
+        cloudSessions = []
+        startCloudWatcher()
+        rebuildSessions()
+    }
+
     // MARK: - Usage Limits Watcher
 
     private func startUsageLimitsWatcher() {
@@ -156,7 +183,11 @@ public class AppState {
             processSession(session, now: now)
         }
 
-        sessions = processedLocal + processedRemote
+        let processedCloud = cloudSessions.compactMap { session -> AgentSession? in
+            processSession(session, now: now)
+        }
+
+        sessions = processedLocal + processedRemote + processedCloud
     }
 
     // MARK: - Session Processing
