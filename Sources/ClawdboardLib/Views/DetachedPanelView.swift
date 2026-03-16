@@ -5,7 +5,6 @@ import SwiftUI
 public struct DetachedPanelView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("showFloatingWindow") private var showFloatingWindow = false
-    @Environment(\.dismissWindow) private var dismissWindow
 
     public init() {}
 
@@ -57,7 +56,9 @@ public struct DetachedPanelView: View {
             Divider()
             Button("Attach to Menu Bar") {
                 showFloatingWindow = false
-                dismissWindow(id: "main")
+                NotificationCenter.default.post(
+                    name: .closeFloatingWindow, object: nil
+                )
             }
             Divider()
             Button("Quit Clawdboard") {

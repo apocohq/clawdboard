@@ -1,15 +1,242 @@
 import AppKit
 import ClawdboardLib
+import Observation
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusItem: NSStatusItem!
+    private var popover: NSPopover!
+    private(set) var appState: AppState!
+    private var defaultsObservers: [Any] = []
+    private var floatingWindow: NSWindow?
+
+    /// Shared reference so the App struct can access appState for Settings.
+    static var shared: AppDelegate?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.shared = self
         NSApp.setActivationPolicy(.accessory)
+
+        // Register defaults so UserDefaults reads match @AppStorage defaults.
+        UserDefaults.standard.register(defaults: [
+            "useRedYellowMode": true,
+            "usageRingThreshold": 50,
+        ])
+
+        appState = AppState()
+        appState.start()
+
+        setupStatusItem()
+        setupPopover()
+        updateStatusItem()
+
+        // Observe appState changes to update the menu bar icon.
+        // AppState is @Observable, so we use withObservationTracking in a loop.
+        startObserving()
+        observeDefaults()
+        observeFloatingWindowNotifications()
+
+        // Open the floating window at launch if the preference is set.
+        if UserDefaults.standard.bool(forKey: "showFloatingWindow") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.openFloatingWindow()
+            }
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             Self.checkAndInstallHooks()
         }
     }
+
+    // MARK: - Status Item Setup
+
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            button.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
+            button.target = self
+            button.action = #selector(togglePopover)
+        }
+    }
+
+    private func setupPopover() {
+        popover = NSPopover()
+        popover.contentSize = NSSize(width: 380, height: 500)
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentViewController = NSHostingController(
+            rootView: PanelView().environment(appState)
+        )
+    }
+
+    @objc private func togglePopover() {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Ensure the popover's window is key so it can receive events
+            popover.contentViewController?.view.window?.makeKey()
+        }
+    }
+
+    // MARK: - Status Item Updates
+
+    private func observeDefaults() {
+        let obs = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.updateStatusItem()
+        }
+        defaultsObservers.append(obs)
+    }
+
+    private func startObserving() {
+        // Use withObservationTracking to re-render whenever AppState changes.
+        withObservationTracking {
+            // Access the properties we care about to register tracking
+            _ = appState.needsApprovalCount
+            _ = appState.waitingCount
+            _ = appState.workingCount
+            _ = appState.usageLimits
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.updateStatusItem()
+                self?.startObserving()
+            }
+        }
+    }
+
+    private func updateStatusItem() {
+        guard let button = statusItem.button else { return }
+
+        let approval = appState.needsApprovalCount
+        let waiting = appState.waitingCount
+        let working = appState.workingCount
+
+        let useRedYellowMode = UserDefaults.standard.bool(forKey: "useRedYellowMode")
+        let usageRingThreshold = UserDefaults.standard.integer(forKey: "usageRingThreshold")
+        let effectiveThreshold = usageRingThreshold > 0 ? usageRingThreshold : 50
+
+        let usagePct: CGFloat? = {
+            guard let limits = appState.usageLimits else { return nil }
+            return CGFloat(limits.fiveHour.utilization)
+        }()
+        let showRing = usagePct.map { $0 >= CGFloat(effectiveThreshold) } ?? false
+
+        if approval == 0 && waiting == 0 && working == 0 {
+            // Idle state
+            if showRing, let pct = usagePct,
+                let img = MenuBarRenderer.renderRingOnly(pct: pct)
+            {
+                button.image = img
+            } else {
+                button.image = NSImage(
+                    systemSymbolName: "terminal", accessibilityDescription: nil
+                )
+            }
+            // Clear any pill background
+            button.wantsLayer = true
+            button.layer?.backgroundColor = nil
+        } else if let (image, pillColor) = MenuBarRenderer.renderStatusImage(
+            approval: approval, waiting: waiting, working: working,
+            useRedYellowMode: useRedYellowMode,
+            usagePct: showRing ? usagePct : nil
+        ) {
+            button.image = image
+            // Apply pill background directly on the button's layer
+            // so it fills the system's exact button bounds (no pill-inside-pill).
+            button.wantsLayer = true
+            if let color = pillColor {
+                button.layer?.backgroundColor = color.cgColor
+                button.layer?.cornerRadius = button.frame.height / 2
+                button.layer?.masksToBounds = true
+            } else {
+                button.layer?.backgroundColor = nil
+            }
+        }
+    }
+
+    // MARK: - Floating Window
+
+    private func observeFloatingWindowNotifications() {
+        NotificationCenter.default.addObserver(
+            forName: .openFloatingWindow, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.openFloatingWindow()
+            // Dismiss the popover when detaching
+            self?.popover.performClose(nil)
+        }
+        NotificationCenter.default.addObserver(
+            forName: .closeFloatingWindow, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.closeFloatingWindow()
+        }
+    }
+
+    func openFloatingWindow() {
+        // If already open, just bring it front
+        if let existing = floatingWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let hostingView = NSHostingView(
+            rootView: ZStack {
+                Color.clear
+                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.5))
+                    .background(.thinMaterial)
+                    .ignoresSafeArea()
+
+                DetachedPanelView()
+                    .environment(appState!)
+            }
+        )
+
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
+            styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
+            backing: .buffered, defer: false
+        )
+        window.title = "Clawdboard"
+        window.contentView = hostingView
+        window.center()
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.standardWindowButton(.closeButton)?.isHidden = true
+
+        // Add hover tracking for close button visibility
+        let tracker = FloatingWindowHoverTracker(window: window)
+        tracker.frame = hostingView.bounds
+        tracker.autoresizingMask = [.width, .height]
+        hostingView.addSubview(tracker)
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        floatingWindow = window
+
+        // Reset pref when closed via the X button
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window, queue: .main
+        ) { [weak self] _ in
+            UserDefaults.standard.set(false, forKey: "showFloatingWindow")
+            self?.floatingWindow = nil
+        }
+    }
+
+    private func closeFloatingWindow() {
+        floatingWindow?.close()
+        floatingWindow = nil
+    }
+
+    // MARK: - Hook Installation
 
     static func checkAndInstallHooks() {
         let hookManager = HookManager.shared
@@ -58,171 +285,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ClawdboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var appState: AppState = {
-        let state = AppState()
-        state.start()
-        return state
-    }()
+
     var body: some Scene {
-        Window("Clawdboard", id: "main") {
-            ZStack {
-                Color.clear
-                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.5))
-                    .background(.thinMaterial)
-                    .ignoresSafeArea()
-
-                DetachedPanelView()
-                    .environment(appState)
-            }
-            .background(WindowConfigurator())
-        }
-        .windowToolbarStyle(.unifiedCompact)
-        .defaultSize(width: 420, height: 520)
-        .windowResizability(.contentMinSize)
-        .defaultLaunchBehavior(.suppressed)
-
-        MenuBarExtra {
-            PanelView()
-                .environment(appState)
-        } label: {
-            MenuBarLabelWithLauncher(appState: appState)
-        }
-        .menuBarExtraStyle(.window)
-
         Settings {
-            SettingsView()
-                .environment(appState)
-                .onAppear {
-                    for window in NSApplication.shared.windows
-                    where window.identifier?.rawValue.contains("settings") == true
-                        || window.title.contains("Settings")
-                    {
-                        window.level = .floating
+            if let appState = AppDelegate.shared?.appState {
+                SettingsView()
+                    .environment(appState)
+                    .onAppear {
+                        for window in NSApplication.shared.windows
+                        where window.identifier?.rawValue.contains("settings") == true
+                            || window.title.contains("Settings")
+                        {
+                            window.level = .floating
+                        }
                     }
-                }
+            }
         }
     }
 }
 
-/// Sets the hosting window to float above normal windows so it stays always visible.
-/// Resets the "showFloatingWindow" preference when the window is closed via the X button.
-private struct WindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                window.level = .floating
-                window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-                window.titlebarAppearsTransparent = true
-                window.isOpaque = false
-                window.backgroundColor = .clear
-                window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-                window.standardWindowButton(.zoomButton)?.isHidden = true
+// MARK: - Floating Window Hover
 
-                context.coordinator.observe(window)
-                Self.setupInitialState(window: window)
-            }
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    /// Animate close button, toolbar menu button, and title on hover.
-    static func setHoverState(window: NSWindow, hovering: Bool) {
-        let alpha: CGFloat = hovering ? 1 : 0
-
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-
-            // Close button — snap visibility (system widget doesn't animate alpha cleanly)
-            window.standardWindowButton(.closeButton)?.isHidden = !hovering
-
-            // Title — use alphaValue so it animates on the same curve as the menu button
-            findView(in: window, matching: "ToolbarTitleView")?.animator().alphaValue =
-                hovering ? 1.0 : 0.3
-
-            // Toolbar item viewer (menu button)
-            findView(in: window, matching: "ToolbarItemViewer")?.animator().alphaValue = alpha
-        }
-    }
-
-    /// Initial setup: dim title, hide buttons, permanently hide the glass pill.
-    static func setupInitialState(window: NSWindow) {
-        window.standardWindowButton(.closeButton)?.isHidden = true
-
-        findView(in: window, matching: "ToolbarTitleView")?.alphaValue = 0.3
-
-        func setup(_ view: NSView) {
-            let name = String(describing: type(of: view))
-            if name.contains("ToolbarPlatterView") {
-                view.isHidden = true
-                return
-            }
-            if name.contains("ToolbarItemViewer") {
-                view.alphaValue = 0
-                return
-            }
-            for sub in view.subviews { setup(sub) }
-        }
-
-        if let container = window.standardWindowButton(.closeButton)?.superview?.superview {
-            setup(container)
-        }
-
-        // Pin the title view to full width so toolbar layout changes don't shift it
-        if let titleView = findView(in: window, matching: "ToolbarTitleView") {
-            titleView.translatesAutoresizingMaskIntoConstraints = false
-            if let superview = titleView.superview {
-                NSLayoutConstraint.activate([
-                    titleView.centerXAnchor.constraint(equalTo: superview.centerXAnchor),
-                    titleView.centerYAnchor.constraint(equalTo: superview.centerYAnchor),
-                ])
-            }
-        }
-    }
-
-    /// Recursively find a view whose class name contains the given string.
-    private static func findView(in window: NSWindow, matching className: String) -> NSView? {
-        guard let root = window.standardWindowButton(.closeButton)?.superview?.superview
-        else { return nil }
-        func search(_ view: NSView) -> NSView? {
-            if String(describing: type(of: view)).contains(className) { return view }
-            for sub in view.subviews {
-                if let found = search(sub) { return found }
-            }
-            return nil
-        }
-        return search(root)
-    }
-
-    final class Coordinator: NSObject {
-        private var observation: Any?
-
-        func observe(_ window: NSWindow) {
-            observation = NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification,
-                object: window, queue: .main
-            ) { _ in
-                UserDefaults.standard.set(false, forKey: "showFloatingWindow")
-            }
-
-            // Add a tracking view to detect mouse enter/exit on the window
-            guard let contentView = window.contentView else { return }
-            let tracker = ToolbarHoverTracker(window: window)
-            tracker.frame = contentView.bounds
-            tracker.autoresizingMask = [.width, .height]
-            contentView.addSubview(tracker)
-        }
-
-        deinit { observation.map(NotificationCenter.default.removeObserver) }
-    }
-}
-
-/// Invisible tracking view that shows/hides toolbar items on window hover.
-private final class ToolbarHoverTracker: NSView {
+/// Invisible tracking view that shows/hides the close button on window hover.
+private final class FloatingWindowHoverTracker: NSView {
     weak var trackedWindow: NSWindow?
 
     init(window: NSWindow) {
@@ -245,78 +330,29 @@ private final class ToolbarHoverTracker: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         guard let window = trackedWindow else { return }
-        WindowConfigurator.setHoverState(window: window, hovering: true)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            window.standardWindowButton(.closeButton)?.isHidden = false
+        }
     }
 
     override func mouseExited(with event: NSEvent) {
         guard let window = trackedWindow else { return }
-        WindowConfigurator.setHoverState(window: window, hovering: false)
-    }
-}
-
-/// Thin wrapper around MenuBarLabel that optionally opens the floating window at launch.
-struct MenuBarLabelWithLauncher: View {
-    let appState: AppState
-    @AppStorage("showFloatingWindow") private var showFloatingWindow = false
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        MenuBarLabel(appState: appState)
-            .task {
-                if showFloatingWindow {
-                    openWindow(id: "main")
-                }
-            }
-    }
-}
-
-/// Menu bar label rendered as an NSImage so we get proper SF Symbols + text.
-/// SwiftUI MenuBarExtra labels don't reliably render complex view hierarchies,
-/// but a single Image backed by a rendered NSImage works perfectly.
-struct MenuBarLabel: View {
-    let appState: AppState
-    @AppStorage("useRedYellowMode") private var useRedYellowMode = true
-    @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
-
-    /// Usage fill percentage (0–100) from the 5-hour usage limit, nil if unavailable.
-    private var usagePct: CGFloat? {
-        guard let limits = appState.usageLimits else { return nil }
-        return CGFloat(limits.fiveHour.utilization)
-    }
-
-    /// Whether the usage ring should be shown (above threshold).
-    private var showRing: Bool {
-        guard let pct = usagePct else { return false }
-        return pct >= CGFloat(usageRingThreshold)
-    }
-
-    var body: some View {
-        let approval = appState.needsApprovalCount
-        let waiting = appState.waitingCount
-        let working = appState.workingCount
-
-        if approval == 0 && waiting == 0 && working == 0 {
-            if showRing, let pct = usagePct,
-                let img = Self.renderRingOnly(pct: pct)
-            {
-                Image(nsImage: img)
-            } else {
-                Image(systemName: "terminal")
-            }
-        } else if let image = Self.renderStatusImage(
-            approval: approval, waiting: waiting, working: working,
-            useRedYellowMode: useRedYellowMode,
-            usagePct: showRing ? usagePct : nil
-        ) {
-            Image(nsImage: image)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            window.standardWindowButton(.closeButton)?.isHidden = true
         }
     }
+}
 
-    // MARK: - Ring Drawing
+// MARK: - Menu Bar Rendering
+
+/// Pure rendering functions for menu bar icon images.
+/// Extracted from the old MenuBarLabel so they can be called from AppDelegate.
+enum MenuBarRenderer {
 
     /// Draw a circular progress ring into the current graphics context.
-    /// Uses the provided foreground color for the arc and a faded version for the track.
-    private static func drawRing(
+    static func drawRing(
         center: NSPoint, radius: CGFloat, lineWidth: CGFloat, pct: CGFloat,
         color: NSColor = .black
     ) {
@@ -341,7 +377,7 @@ struct MenuBarLabel: View {
     }
 
     /// Create a bitmap rep for menu bar rendering at Retina scale.
-    private static func makeMenuBarRep(size: NSSize) -> (NSBitmapImageRep, NSSize) {
+    static func makeMenuBarRep(size: NSSize) -> (NSBitmapImageRep, NSSize) {
         let scale = NSScreen.main?.backingScaleFactor ?? 2.0
         let pixelSize = NSSize(width: size.width * scale, height: size.height * scale)
         let rep = NSBitmapImageRep(
@@ -358,7 +394,7 @@ struct MenuBarLabel: View {
     }
 
     /// Render a standalone usage ring for idle state. Always template.
-    private static func renderRingOnly(pct: CGFloat) -> NSImage? {
+    static func renderRingOnly(pct: CGFloat) -> NSImage? {
         let menuBarHeight = NSStatusBar.system.thickness
         let ringDiameter: CGFloat = 14
         let imageSize = NSSize(width: ringDiameter, height: menuBarHeight)
@@ -380,12 +416,13 @@ struct MenuBarLabel: View {
     }
 
     /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
-    /// Pill background color depends on state and user's color mode preference.
-    private static func renderStatusImage(
+    /// Returns the image and the pill color (if any) so the caller can apply
+    /// the background directly on the NSStatusBarButton's layer.
+    static func renderStatusImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,
         usagePct: CGFloat? = nil
-    ) -> NSImage? {
+    ) -> (NSImage, NSColor?)? {
         var segments: [(symbol: String, count: Int)] = []
         if approval > 0 {
             segments.append(("exclamationmark.triangle.fill", approval))
@@ -494,18 +531,13 @@ struct MenuBarLabel: View {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 
-        if let color = pillColor {
-            // Pill covers everything including the ring
-            let pillRect = NSRect(origin: .zero, size: imageSize)
-            let path = NSBezierPath(roundedRect: pillRect, xRadius: 4, yRadius: 4)
-            color.setFill()
-            path.fill()
-        }
+        // No pill background drawn here — the caller sets it on the
+        // NSStatusBarButton's layer so it fills the exact button bounds.
 
         let textY = (imageSize.height - textSize.height) / 2
         result.draw(at: NSPoint(x: hPad, y: textY))
 
-        // Ring after the pill
+        // Ring after the text
         if let pct = usagePct {
             let pillWidth = ceil(textSize.width) + hPad * 2
             drawRing(
@@ -524,6 +556,6 @@ struct MenuBarLabel: View {
         image.addRepresentation(rep)
         // Template when no pill — ring is black so it adapts too
         image.isTemplate = !hasPill
-        return image
+        return (image, pillColor)
     }
 }

@@ -1,11 +1,15 @@
 import SwiftUI
 
+/// Notifications for floating window management (bridging ClawdboardLib → App).
+public extension Notification.Name {
+    static let openFloatingWindow = Notification.Name("clawdboard.openFloatingWindow")
+    static let closeFloatingWindow = Notification.Name("clawdboard.closeFloatingWindow")
+}
+
 /// The main panel shown when clicking the menu bar icon.
 /// Header with status summary, sessions list, and footer.
 public struct PanelView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
     @AppStorage("showFloatingWindow") private var showFloatingWindow = false
 
     public init() {}
@@ -98,20 +102,15 @@ public struct PanelView: View {
                 isOn: Binding(
                     get: { showFloatingWindow },
                     set: { newValue in
-                        let menuBarPanel = NSApp.keyWindow
                         showFloatingWindow = newValue
                         if newValue {
-                            openWindow(id: "main")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                menuBarPanel?.orderOut(nil)
-                                for window in NSApp.windows
-                                where window.title == "Clawdboard" && window.level == .floating {
-                                    window.makeKeyAndOrderFront(nil)
-                                }
-                                NSApp.activate(ignoringOtherApps: true)
-                            }
+                            NotificationCenter.default.post(
+                                name: .openFloatingWindow, object: nil
+                            )
                         } else {
-                            dismissWindow(id: "main")
+                            NotificationCenter.default.post(
+                                name: .closeFloatingWindow, object: nil
+                            )
                         }
                     }
                 )
