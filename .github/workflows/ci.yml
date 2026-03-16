@@ -50,4 +50,7 @@ jobs:
       - run: mise run test 2>&1 | tee /tmp/output.txt; exit ${PIPESTATUS[0]}
       - if: failure()
         run: |
-          tail -200 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
+          # Emit errors/failures specifically, then tail
+          grep -iE '(error:|fail|fatal|assert)' /tmp/output.txt | head -30 | while IFS= read -r line; do echo "::error::$line"; done
+          echo "::warning::--- LAST 50 LINES ---"
+          tail -50 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
