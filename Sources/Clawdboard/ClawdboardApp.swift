@@ -379,9 +379,9 @@ struct MenuBarLabel: View {
         return image
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
     /// Pill background color depends on state and user's color mode preference.
-    // swiftlint:disable:next cyclomatic_complexity
     private static func renderStatusImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,

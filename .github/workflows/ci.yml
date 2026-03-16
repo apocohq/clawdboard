@@ -47,4 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
-      - run: mise run test
+      - run: mise run test 2>&1 | tee /tmp/output.txt; exit ${PIPESTATUS[0]}
+      - if: failure()
+        run: |
+          tail -80 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
