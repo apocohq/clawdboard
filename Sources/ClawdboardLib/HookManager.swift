@@ -215,7 +215,16 @@ public class HookManager {
             mkdir -p ~/.clawdboard/hooks ~/.clawdboard/sessions
 
             # Install the cryptography package for ECIES encryption
-            pip install -q cryptography 2>/dev/null || pip3 install -q cryptography 2>/dev/null || true
+            pip install -q cryptography 2>/dev/null || pip3 install -q cryptography 2>/dev/null || {
+                echo "ERROR: Failed to install 'cryptography' package. Cloud push requires it."
+                exit 1
+            }
+
+            # Verify the import actually works
+            python3 -c "from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey" 2>/dev/null || {
+                echo "ERROR: 'cryptography' installed but import failed. Check Python environment."
+                exit 1
+            }
 
             # Write hook script
             cat > ~/.clawdboard/hooks/clawdboard-hook.py << 'CLAWDBOARD_HOOK_EOF'

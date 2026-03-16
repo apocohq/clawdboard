@@ -359,10 +359,14 @@ def push_to_cloud(state: JsonDict) -> None:
         _firestore_patch(channel_id, session_id, blob_b64)
 
     except ImportError:
-        # cryptography package not installed — skip cloud push silently
-        pass
-    except Exception:
-        pass
+        with open(LOG_FILE, "a") as lf:
+            lf.write(
+                f"[cloud] CLAWDBOARD_KEY set but 'cryptography' package not installed — "
+                f"cloud push skipped. Run: pip install cryptography\n"
+            )
+    except Exception as exc:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[cloud] push failed: {exc}\n")
 
 
 def delete_from_cloud(session_id: str) -> None:
