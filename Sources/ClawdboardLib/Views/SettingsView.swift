@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Settings form accessible via ⌘, or from the panel.

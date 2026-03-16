@@ -31,6 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
+      - run: swift --version && xcodebuild -version
       - run: mise run build
 
   test:
