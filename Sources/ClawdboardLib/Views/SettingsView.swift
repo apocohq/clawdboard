@@ -5,6 +5,8 @@ public struct SettingsView: View {
     @State private var hookStatus: String = "Checking..."
     @State private var isReinstalling = false
     @State private var showUninstallConfirm = false
+    @State private var iterm2Installed = false
+    @State private var isInstallingITerm2 = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
@@ -22,7 +24,10 @@ public struct SettingsView: View {
         }
         .frame(width: 500, height: 400)
         .background(.ultraThinMaterial)
-        .onAppear { checkHookStatus() }
+        .onAppear {
+            checkHookStatus()
+            iterm2Installed = ITerm2Installer.isInstalled
+        }
     }
 
     // MARK: - General Tab
@@ -48,7 +53,7 @@ public struct SettingsView: View {
                 HStack {
                     Text(hookStatus)
                     Spacer()
-                    Button("Reinstall Hooks") {
+                    Button("Reinstall") {
                         reinstallHooks()
                     }
                     .disabled(isReinstalling)
@@ -67,6 +72,30 @@ public struct SettingsView: View {
                     Text(
                         "This removes Clawdboard hooks from ~/.claude/settings.json and deletes session data. Claude Code will not be affected."
                     )
+                }
+            }
+
+            if ITerm2Installer.isITerm2Available {
+                Section("iTerm2 Integration") {
+                    HStack {
+                        Text(iterm2Installed ? "Installed \u{2713}" : "Not installed")
+                        Spacer()
+                        Button(iterm2Installed ? "Reinstall" : "Install") { installITerm2() }
+                            .disabled(isInstallingITerm2)
+                        if iterm2Installed {
+                            Button("Uninstall") { uninstallITerm2() }
+                        }
+                    }
+                    Text("Enables click-to-focus from Clawdboard to the correct iTerm2 pane")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if !ITerm2Installer.isPythonAPIEnabled {
+                        Text(
+                            "Requires Python API: iTerm2 \u{2192} Settings \u{2192} General \u{2192} Magic \u{2192} Enable Python API"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    }
                 }
             }
 
@@ -205,6 +234,23 @@ public struct SettingsView: View {
             hookStatus = "Error: \(error.localizedDescription)"
         }
         isReinstalling = false
+    }
+
+    private func installITerm2() {
+        isInstallingITerm2 = true
+        do {
+            try ITerm2Installer.install()
+            iterm2Installed = true
+            ITerm2Installer.launchScript()
+        } catch {
+            iterm2Installed = false
+        }
+        isInstallingITerm2 = false
+    }
+
+    private func uninstallITerm2() {
+        ITerm2Installer.uninstall()
+        iterm2Installed = false
     }
 
     private func uninstallHooks() {

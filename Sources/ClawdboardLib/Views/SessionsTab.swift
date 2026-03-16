@@ -37,7 +37,10 @@ public struct SessionsTab: View {
                         AgentRow(
                             session: session,
                             isExpanded: appState.expandedSessionId == session.id,
-                            onToggle: { appState.toggleExpanded(sessionId: session.id) }
+                            onToggle: { appState.toggleExpanded(sessionId: session.id) },
+                            onFocusiTerm2: session.iterm2SessionId != nil
+                                ? { appState.focusITerm2Session(session) }
+                                : nil
                         )
                     }
                 }

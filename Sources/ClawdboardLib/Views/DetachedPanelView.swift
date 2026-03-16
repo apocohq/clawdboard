@@ -51,7 +51,7 @@ public struct DetachedPanelView: View {
             SettingsLink {
                 Text("Settings...")
             }
-            Button("Reinstall Hooks") {
+            Button("Reinstall") {
                 try? HookManager.shared.install()
             }
             Divider()

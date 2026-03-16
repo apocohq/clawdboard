@@ -219,6 +219,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// GitHub repo slug (e.g. "user/repo") if the cwd has a GitHub remote, nil otherwise
     public var githubRepo: String?
 
+    /// iTerm2 session UUID, written back by the iTerm2 integration script
+    public var iterm2SessionId: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -235,6 +238,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case isHookTracked = "is_hook_tracked"
         case remoteHost = "remote_host"
         case githubRepo = "github_repo"
+        case iterm2SessionId = "iterm2_session_id"
     }
 
     public init(
@@ -252,7 +256,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         pid: Int? = nil,
         isHookTracked: Bool = false,
         remoteHost: String? = nil,
-        githubRepo: String? = nil
+        githubRepo: String? = nil,
+        iterm2SessionId: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -269,6 +274,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.isHookTracked = isHookTracked
         self.remoteHost = remoteHost
         self.githubRepo = githubRepo
+        self.iterm2SessionId = iterm2SessionId
     }
 
     /// Formatted context usage like "68%"

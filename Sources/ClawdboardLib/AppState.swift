@@ -236,6 +236,22 @@ public class AppState {
             expandedSessionId = sessionId
         }
     }
+
+    public func focusITerm2Session(_ session: AgentSession) {
+        guard let uuid = session.iterm2SessionId else { return }
+        let focusScript = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".clawdboard/iterm2-focus.py")
+        guard FileManager.default.fileExists(atPath: focusScript.path) else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        task.arguments = [focusScript.path, uuid]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? task.run()
+            task.waitUntilExit()
+        }
+    }
 }
 
 // MARK: - Display Status Helper

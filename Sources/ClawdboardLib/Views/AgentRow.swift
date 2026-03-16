@@ -5,11 +5,18 @@ public struct AgentRow: View {
     public let session: AgentSession
     public let isExpanded: Bool
     public let onToggle: () -> Void
+    public var onFocusiTerm2: (() -> Void)?
 
-    public init(session: AgentSession, isExpanded: Bool, onToggle: @escaping () -> Void) {
+    public init(
+        session: AgentSession,
+        isExpanded: Bool,
+        onToggle: @escaping () -> Void,
+        onFocusiTerm2: (() -> Void)? = nil
+    ) {
         self.session = session
         self.isExpanded = isExpanded
         self.onToggle = onToggle
+        self.onFocusiTerm2 = onFocusiTerm2
     }
 
     public var body: some View {
@@ -58,6 +65,18 @@ public struct AgentRow: View {
                 }
 
                 Spacer()
+
+                if let onFocusiTerm2 = onFocusiTerm2 {
+                    Button(action: onFocusiTerm2) {
+                        Image(systemName: "arrow.up.forward.app")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Focus in iTerm2")
+                }
 
                 if session.isHookTracked {
                     VStack(alignment: .trailing, spacing: 1) {

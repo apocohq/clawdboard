@@ -105,6 +105,45 @@ struct ModelsTests {
         #expect(session.isHookTracked == true)
     }
 
+    @Test("iterm2SessionId decodes when present")
+    func iterm2SessionIdPresent() throws {
+        let json = """
+            {
+                "session_id": "abc123",
+                "cwd": "/tmp",
+                "project_name": "test",
+                "status": "working",
+                "is_hook_tracked": true,
+                "iterm2_session_id": "w0t0p0.DEADBEEF-1234-5678-9ABC-DEF012345678"
+            }
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(
+            AgentSession.self, from: json.data(using: .utf8)!  // swiftlint:disable:this force_unwrapping
+        )
+        #expect(session.iterm2SessionId == "w0t0p0.DEADBEEF-1234-5678-9ABC-DEF012345678")
+    }
+
+    @Test("iterm2SessionId is nil when absent")
+    func iterm2SessionIdAbsent() throws {
+        let json = """
+            {
+                "session_id": "abc456",
+                "cwd": "/tmp",
+                "project_name": "test",
+                "status": "waiting",
+                "is_hook_tracked": true
+            }
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(
+            AgentSession.self, from: json.data(using: .utf8)!  // swiftlint:disable:this force_unwrapping
+        )
+        #expect(session.iterm2SessionId == nil)
+    }
+
     @Test("elapsedTime formats hours and minutes")
     func elapsedTime() {
         let recent = AgentSession(
