@@ -87,7 +87,6 @@ public class KeychainManager {
         )
 
         // AES-256-GCM decrypt
-        let nonce = try AES.GCM.Nonce(data: nonceData)
         let sealedBox = try AES.GCM.SealedBox(combined: nonceData + ciphertextAndTag)
         return try AES.GCM.open(sealedBox, using: symmetricKey)
     }

@@ -15,6 +15,7 @@ disabled_rules:
   - line_length  # swift-format handles this
   - opening_brace  # conflicts with swift-format multi-line conditions
   - implicit_optional_initialization  # stylistic, not a bug
+  - cyclomatic_complexity  # menu bar rendering function legitimately complex
 
 opt_in_rules:
   - empty_count
