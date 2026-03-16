@@ -67,7 +67,7 @@ struct ClawdboardApp: App {
         Window("Clawdboard", id: "main") {
             ZStack {
                 Color.clear
-                    .background(Color.white.opacity(0.5))
+                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.5))
                     .background(.thinMaterial)
                     .ignoresSafeArea()
 
