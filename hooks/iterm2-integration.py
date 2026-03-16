@@ -5,7 +5,7 @@ Polls ~/.clawdboard/sessions/*.json every 2s and matches Claude Code sessions
 to iTerm2 panes by PID ancestry. Writes the iTerm2 session UUID back into
 the session JSON so the Clawdboard panel can focus the correct pane.
 
-Install to: ~/Library/Application Support/iTerm2/Scripts/AutoLaunch/clawdboard.py
+Install to: ~/.config/iterm2/AppSupport/Scripts/AutoLaunch/clawdboard.py
 """
 
 from __future__ import annotations
