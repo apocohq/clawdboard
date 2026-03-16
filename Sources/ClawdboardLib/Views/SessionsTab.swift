@@ -28,10 +28,10 @@ public struct SessionsTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(groups, id: \.key) { group in
                     Text(group.key)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.tertiary)
                         .textCase(.uppercase)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 4)
                         .padding(.top, group.key == groups.first?.key ? 0 : 6)
                     ForEach(group.sessions) { session in
                         AgentRow(

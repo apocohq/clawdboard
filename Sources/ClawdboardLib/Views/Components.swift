@@ -97,19 +97,19 @@ public struct UsageLimitsView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 12) {
                 UsageWindowView(label: "5h", window: limits.fiveHour)
-                Divider().frame(height: 40)
+                Divider().frame(height: 44)
                 UsageWindowView(label: "7d", window: limits.sevenDay)
             }
 
             HStack(spacing: 4) {
                 Text("Updated \(updatedText)")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
 
                 if let onRefresh {
                     Button(action: onRefresh) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.plain)
@@ -154,22 +154,22 @@ struct UsageWindowView: View {
                     .stroke(ringColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 Text(String(format: "%.0f%%", window.utilization))
-                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
             }
-            .frame(width: 32, height: 32)
+            .frame(width: 36, height: 36)
 
             // Metrics
             VStack(alignment: .leading, spacing: 1) {
                 Text(label)
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 4) {
                     Text(String(format: "~%.0f%% est", window.estimated))
-                        .font(.caption2.monospacedDigit())
+                        .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
                 Text("resets \(window.remainingText)")
-                    .font(.caption2.monospacedDigit())
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
         }

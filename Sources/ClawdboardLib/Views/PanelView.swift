@@ -1,5 +1,50 @@
 import SwiftUI
 
+// MARK: - Shared Sessions Content
+
+/// Shared content section used by both panel and detached views:
+/// usage limits, divider, and sessions list (or empty state).
+public struct SessionsContent: View {
+    @Environment(AppState.self) private var appState
+
+    public init() {}
+
+    public var body: some View {
+        if let limits = appState.usageLimits {
+            UsageLimitsView(
+                limits: limits,
+                error: appState.usageLimitsError,
+                onRefresh: { appState.refreshUsageLimits() }
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+
+        Divider()
+            .padding(.bottom, 4)
+
+        if appState.sessions.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "terminal")
+                    .font(.title2)
+                    .foregroundStyle(.tertiary)
+                Text("No active sessions")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Start a Claude Code session to see it here")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+        } else {
+            SessionsTab()
+        }
+    }
+}
+
+// MARK: - Panel View
+
 /// The main panel shown when clicking the menu bar icon.
 /// Header with status summary, sessions list, and footer.
 public struct PanelView: View {
@@ -12,38 +57,18 @@ public struct PanelView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
             header
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
                 .padding(.bottom, 6)
 
-            // Usage limits (Claude API)
-            if let limits = appState.usageLimits {
-                UsageLimitsView(
-                    limits: limits,
-                    error: appState.usageLimitsError,
-                    onRefresh: { appState.refreshUsageLimits() }
-                )
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            }
+            SessionsContent()
 
             Divider()
 
-            // Content
-            if appState.sessions.isEmpty {
-                emptyState
-            } else {
-                SessionsTab()
-            }
-
-            Divider()
-
-            // Footer
             footer
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.vertical, 8)
         }
         .frame(width: 420)
     }
@@ -68,22 +93,6 @@ public struct PanelView: View {
                 }
             }
         }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "terminal")
-                .font(.title2)
-                .foregroundStyle(.tertiary)
-            Text("No active sessions")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text("Start a Claude Code session to see it here")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
     }
 
     private var footer: some View {
