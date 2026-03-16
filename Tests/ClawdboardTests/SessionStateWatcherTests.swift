@@ -14,6 +14,7 @@ struct SessionStateWatcherTests {
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpDir) }
 
+        // Use current PID so the session passes the "process alive" check
         let stateJSON = """
             {
                 "session_id": "test-123",
@@ -24,7 +25,8 @@ struct SessionStateWatcherTests {
                 "context_pct": 42.0,
                 "started_at": "2026-03-12T08:00:00Z",
                 "updated_at": "2026-03-12T09:00:00Z",
-                "is_hook_tracked": true
+                "is_hook_tracked": true,
+                "pid": \(ProcessInfo.processInfo.processIdentifier)
             }
             """
         try stateJSON.write(
