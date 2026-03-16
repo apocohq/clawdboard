@@ -14,7 +14,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
       - run: uv sync
-      - run: mise run lint
+      - run: mise run lint 2>&1 | tee /tmp/output.txt; exit ${PIPESTATUS[0]}
+      - if: failure()
+        run: |
+          # Emit last 50 lines as a warning annotation so it's visible via API
+          tail -50 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
 
   test-python:
     name: Python Tests
@@ -31,8 +35,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
-      - run: swift --version && xcodebuild -version
-      - run: mise run build
+      - run: mise run build 2>&1 | tee /tmp/output.txt; exit ${PIPESTATUS[0]}
+      - if: failure()
+        run: |
+          tail -50 /tmp/output.txt | while IFS= read -r line; do echo "::warning::$line"; done
 
   test:
     name: Swift Tests
