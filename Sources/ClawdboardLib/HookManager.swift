@@ -170,6 +170,7 @@ public class HookManager {
 
     /// The hook script content for remote installation
     public static func remoteHookScript() -> String {
+        // swiftlint:disable:next force_try
         try! scriptSource("clawdboard-hook.py")
     }
 

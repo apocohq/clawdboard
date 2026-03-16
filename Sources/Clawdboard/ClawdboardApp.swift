@@ -352,7 +352,7 @@ struct MenuBarLabel: View {
             hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB,
             bytesPerRow: 0, bitsPerPixel: 0
-        )!
+        )! // swiftlint:disable:this force_unwrapping
         rep.size = size
         return (rep, size)
     }
@@ -381,6 +381,7 @@ struct MenuBarLabel: View {
 
     /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
     /// Pill background color depends on state and user's color mode preference.
+    // swiftlint:disable:next cyclomatic_complexity
     private static func renderStatusImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,

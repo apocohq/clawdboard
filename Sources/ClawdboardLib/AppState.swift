@@ -178,8 +178,7 @@ public class AppState {
             processSession(session, now: now)
         }
 
-        let processedRemote = remoteSessions.values.flatMap { $0 }.compactMap {
-            session -> AgentSession? in
+        let processedRemote = remoteSessions.values.flatMap { $0 }.compactMap { session -> AgentSession? in
             processSession(session, now: now)
         }
 

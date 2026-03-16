@@ -54,8 +54,9 @@ public class SessionStateWatcher {
         // DispatchSource may coalesce rapid writes (e.g. PreToolUse + Stop in quick succession),
         // so this ensures updates are picked up within a few seconds.
         // Also handles PID liveness cleanup for crashed sessions.
-        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) {
-            [weak self] _ in
+        cleanupTimer = Timer.scheduledTimer(
+            withTimeInterval: 3.0, repeats: true
+        ) { [weak self] _ in
             self?.notifyChanges()
         }
     }

@@ -68,9 +68,9 @@ public class KeychainManager {
             throw CloudCryptoError.invalidBlob
         }
 
-        let ephemeralPubKeyData = blob[blob.startIndex..<blob.startIndex + 32]
-        let nonceData = blob[blob.startIndex + 32..<blob.startIndex + 32 + 12]
-        let ciphertextAndTag = blob[blob.startIndex + 32 + 12...]
+        let ephemeralPubKeyData = blob.prefix(32)
+        let nonceData = blob.dropFirst(32).prefix(12)
+        let ciphertextAndTag = blob.dropFirst(32 + 12)
 
         let ephemeralPubKey = try Curve25519.KeyAgreement.PublicKey(
             rawRepresentation: ephemeralPubKeyData)

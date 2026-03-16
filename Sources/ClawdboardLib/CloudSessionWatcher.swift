@@ -23,8 +23,9 @@ public class CloudSessionWatcher {
         guard KeychainManager.shared.hasKeypair else { return }
         isEnabled = true
         poll()
-        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) {
-            [weak self] _ in
+        timer = Timer.scheduledTimer(
+            withTimeInterval: pollInterval, repeats: true
+        ) { [weak self] _ in
             self?.poll()
         }
     }
