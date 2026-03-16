@@ -65,10 +65,17 @@ struct ClawdboardApp: App {
     }()
     var body: some Scene {
         Window("Clawdboard", id: "main") {
-            PanelView()
-                .environment(appState)
-                .background(WindowConfigurator())
+            ZStack {
+                Color.clear
+                    .background(.ultraThinMaterial)
+                    .ignoresSafeArea()
+
+                DetachedPanelView()
+                    .environment(appState)
+            }
+            .background(WindowConfigurator())
         }
+        .windowToolbarStyle(.unifiedCompact)
         .defaultSize(width: 420, height: 520)
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
@@ -105,7 +112,14 @@ private struct WindowConfigurator: NSViewRepresentable {
             if let window = view.window {
                 window.level = .floating
                 window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+                window.titlebarAppearsTransparent = true
+                window.isOpaque = false
+                window.backgroundColor = .clear
+                window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+                window.standardWindowButton(.zoomButton)?.isHidden = true
+
                 context.coordinator.observe(window)
+                Self.setupInitialState(window: window)
             }
         }
         return view
@@ -114,6 +128,77 @@ private struct WindowConfigurator: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// Animate close button, toolbar menu button, and title on hover.
+    static func setHoverState(window: NSWindow, hovering: Bool) {
+        let alpha: CGFloat = hovering ? 1 : 0
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+
+            // Close button (animate the button directly)
+            window.standardWindowButton(.closeButton)?.animator().alphaValue = alpha
+
+            // Title text field
+            if let titleField = findView(in: window, matching: "TitleField") as? NSTextField {
+                titleField.animator().textColor = hovering ? .labelColor : .tertiaryLabelColor
+            }
+
+            // Toolbar item viewer (menu button)
+            findView(in: window, matching: "ToolbarItemViewer")?.animator().alphaValue = alpha
+        }
+    }
+
+    /// Initial setup: dim title, hide buttons, permanently hide the glass pill.
+    static func setupInitialState(window: NSWindow) {
+        window.standardWindowButton(.closeButton)?.alphaValue = 0
+
+        if let titleField = findView(in: window, matching: "TitleField") as? NSTextField {
+            titleField.textColor = .tertiaryLabelColor
+        }
+
+        func setup(_ view: NSView) {
+            let name = String(describing: type(of: view))
+            if name.contains("ToolbarPlatterView") {
+                view.isHidden = true
+                return
+            }
+            if name.contains("ToolbarItemViewer") {
+                view.alphaValue = 0
+                return
+            }
+            for sub in view.subviews { setup(sub) }
+        }
+
+        if let container = window.standardWindowButton(.closeButton)?.superview?.superview {
+            setup(container)
+        }
+
+        // Pin the title view to full width so toolbar layout changes don't shift it
+        if let titleView = findView(in: window, matching: "ToolbarTitleView") {
+            titleView.translatesAutoresizingMaskIntoConstraints = false
+            if let superview = titleView.superview {
+                NSLayoutConstraint.activate([
+                    titleView.centerXAnchor.constraint(equalTo: superview.centerXAnchor),
+                    titleView.centerYAnchor.constraint(equalTo: superview.centerYAnchor),
+                ])
+            }
+        }
+    }
+
+    /// Recursively find a view whose class name contains the given string.
+    private static func findView(in window: NSWindow, matching className: String) -> NSView? {
+        guard let root = window.standardWindowButton(.closeButton)?.superview?.superview
+        else { return nil }
+        func search(_ view: NSView) -> NSView? {
+            if String(describing: type(of: view)).contains(className) { return view }
+            for sub in view.subviews {
+                if let found = search(sub) { return found }
+            }
+            return nil
+        }
+        return search(root)
+    }
 
     final class Coordinator: NSObject {
         private var observation: Any?
@@ -125,9 +210,49 @@ private struct WindowConfigurator: NSViewRepresentable {
             ) { _ in
                 UserDefaults.standard.set(false, forKey: "showFloatingWindow")
             }
+
+            // Add a tracking view to detect mouse enter/exit on the window
+            guard let contentView = window.contentView else { return }
+            let tracker = ToolbarHoverTracker(window: window)
+            tracker.frame = contentView.bounds
+            tracker.autoresizingMask = [.width, .height]
+            contentView.addSubview(tracker)
         }
 
         deinit { observation.map(NotificationCenter.default.removeObserver) }
+    }
+}
+
+/// Invisible tracking view that shows/hides toolbar items on window hover.
+private final class ToolbarHoverTracker: NSView {
+    weak var trackedWindow: NSWindow?
+
+    init(window: NSWindow) {
+        self.trackedWindow = window
+        super.init(frame: .zero)
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    // Pass all clicks through to the views below
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard let window = trackedWindow else { return }
+        WindowConfigurator.setHoverState(window: window, hovering: true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard let window = trackedWindow else { return }
+        WindowConfigurator.setHoverState(window: window, hovering: false)
     }
 }
 
