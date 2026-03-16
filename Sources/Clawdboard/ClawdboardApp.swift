@@ -136,13 +136,12 @@ private struct WindowConfigurator: NSViewRepresentable {
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
 
-            // Close button (animate the button directly)
-            window.standardWindowButton(.closeButton)?.animator().alphaValue = alpha
+            // Close button — snap visibility (system widget doesn't animate alpha cleanly)
+            window.standardWindowButton(.closeButton)?.isHidden = !hovering
 
-            // Title text field
-            if let titleField = findView(in: window, matching: "TitleField") as? NSTextField {
-                titleField.animator().textColor = hovering ? .labelColor : .tertiaryLabelColor
-            }
+            // Title — use alphaValue so it animates on the same curve as the menu button
+            findView(in: window, matching: "ToolbarTitleView")?.animator().alphaValue =
+                hovering ? 1.0 : 0.3
 
             // Toolbar item viewer (menu button)
             findView(in: window, matching: "ToolbarItemViewer")?.animator().alphaValue = alpha
@@ -151,11 +150,9 @@ private struct WindowConfigurator: NSViewRepresentable {
 
     /// Initial setup: dim title, hide buttons, permanently hide the glass pill.
     static func setupInitialState(window: NSWindow) {
-        window.standardWindowButton(.closeButton)?.alphaValue = 0
+        window.standardWindowButton(.closeButton)?.isHidden = true
 
-        if let titleField = findView(in: window, matching: "TitleField") as? NSTextField {
-            titleField.textColor = .tertiaryLabelColor
-        }
+        findView(in: window, matching: "ToolbarTitleView")?.alphaValue = 0.3
 
         func setup(_ view: NSView) {
             let name = String(describing: type(of: view))
