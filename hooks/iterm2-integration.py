@@ -23,22 +23,35 @@ SESSIONS_DIR = Path.home() / ".clawdboard" / "sessions"
 POLL_INTERVAL = 2.0
 
 
-def _get_ancestor_pids(pid: int) -> set[int]:
-    """Walk up the process tree collecting ancestor PIDs."""
+def _build_ppid_map() -> dict[int, int]:
+    """Build a full PID -> PPID map with a single subprocess call."""
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pid=,ppid="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return {}
+    ppid_map: dict[int, int] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            try:
+                ppid_map[int(parts[0])] = int(parts[1])
+            except ValueError:
+                continue
+    return ppid_map
+
+
+def _get_ancestor_pids(pid: int, ppid_map: dict[int, int]) -> set[int]:
+    """Walk up the process tree using a pre-built PID -> PPID map."""
     ancestors: set[int] = set()
     current = pid
     for _ in range(64):  # guard against cycles
-        try:
-            result = subprocess.run(
-                ["ps", "-o", "ppid=", "-p", str(current)],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            ppid = int(result.stdout.strip())
-        except (ValueError, subprocess.TimeoutExpired, OSError):
-            break
-        if ppid <= 1:
+        ppid = ppid_map.get(current)
+        if ppid is None or ppid <= 1:
             break
         ancestors.add(ppid)
         current = ppid
@@ -89,7 +102,7 @@ async def main(connection: iterm2.Connection) -> None:
 
     while True:
         try:
-            sessions = _read_sessions()
+            sessions = await asyncio.to_thread(_read_sessions)
             session_map: dict[str, dict[str, object]] = {}
             for s in sessions:
                 sid = s.get("session_id")
@@ -108,12 +121,15 @@ async def main(connection: iterm2.Connection) -> None:
                         except Exception:  # noqa: BLE001
                             pass
 
+            # Single subprocess to get the full process tree
+            ppid_map = await asyncio.to_thread(_build_ppid_map)
+
             for sid, sdata in session_map.items():
                 claude_pid = sdata.get("pid")
                 if not isinstance(claude_pid, int) or claude_pid <= 0:
                     continue
 
-                ancestors = _get_ancestor_pids(claude_pid)
+                ancestors = _get_ancestor_pids(claude_pid, ppid_map)
                 ancestors.add(claude_pid)
                 matched_pane: iterm2.Session | None = None
                 for shell_pid, pane in pane_pid_map.items():
@@ -127,7 +143,9 @@ async def main(connection: iterm2.Connection) -> None:
                 # Write iTerm2 session UUID back so Clawdboard can focus it
                 session_file = SESSIONS_DIR / f"{sid}.json"
                 if session_file.exists():
-                    _write_iterm2_session_id(session_file, matched_pane.session_id)
+                    await asyncio.to_thread(
+                        _write_iterm2_session_id, session_file, matched_pane.session_id
+                    )
 
         except Exception:  # noqa: BLE001
             pass  # keep running even on transient errors

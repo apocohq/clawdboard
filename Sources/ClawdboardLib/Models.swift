@@ -222,6 +222,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// iTerm2 session UUID, written back by the iTerm2 integration script
     public var iterm2SessionId: String?
 
+    /// The first user prompt, used as a session label
+    public var firstPrompt: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -239,6 +242,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case remoteHost = "remote_host"
         case githubRepo = "github_repo"
         case iterm2SessionId = "iterm2_session_id"
+        case firstPrompt = "first_prompt"
     }
 
     public init(
@@ -257,7 +261,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         isHookTracked: Bool = false,
         remoteHost: String? = nil,
         githubRepo: String? = nil,
-        iterm2SessionId: String? = nil
+        iterm2SessionId: String? = nil,
+        firstPrompt: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -275,6 +280,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.remoteHost = remoteHost
         self.githubRepo = githubRepo
         self.iterm2SessionId = iterm2SessionId
+        self.firstPrompt = firstPrompt
     }
 
     /// Formatted context usage like "68%"

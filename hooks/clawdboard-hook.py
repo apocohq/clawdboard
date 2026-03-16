@@ -147,6 +147,7 @@ def main() -> None:
     transcript_path: str = hook_input.get("transcript_path", "")
     agent_id: str = hook_input.get("agent_id", "")
     agent_type: str = hook_input.get("agent_type", "")
+    prompt: str = hook_input.get("prompt", "")
     claude_pid = os.getppid()
 
     if not session_id:
@@ -195,6 +196,7 @@ def main() -> None:
             project_name,
             now,
             claude_pid,
+            prompt,
         )
     elif hook_event == "Notification":
         handle_notification(state_file, notification_subtype, now)
@@ -390,6 +392,7 @@ def handle_user_prompt_submit(
     project_name: str,
     now: str,
     claude_pid: int,
+    prompt: str = "",
 ) -> None:
     data = read_transcript_data(transcript_path, state_file)
     state = read_state(state_file)
@@ -397,6 +400,12 @@ def handle_user_prompt_submit(
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
     state["status"] = "working"
     state["updated_at"] = now
+    # Capture the first user prompt as the session name
+    if prompt and not state.get("first_prompt"):
+        # Take first line, strip whitespace, truncate to 100 chars
+        first_line = prompt.strip().split("\n")[0].strip()
+        if first_line:
+            state["first_prompt"] = first_line[:100]
     merge_transcript_data(state, data)
     write_state(state_file, state)
 

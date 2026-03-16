@@ -26,8 +26,12 @@ public struct AgentRow: View {
                 StatusDot(status: session.displayStatus)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(session.projectName)
-                        .font(.system(.body, design: .monospaced, weight: .medium))
+                    Text(session.firstPrompt ?? session.projectName)
+                        .font(
+                            session.firstPrompt != nil
+                                ? .system(.body, weight: .medium)
+                                : .system(.body, design: .monospaced, weight: .medium)
+                        )
                         .lineLimit(1)
 
                     HStack(spacing: 4) {
