@@ -67,7 +67,8 @@ struct ClawdboardApp: App {
         Window("Clawdboard", id: "main") {
             ZStack {
                 Color.clear
-                    .background(.ultraThinMaterial)
+                    .background(Color.white.opacity(0.5))
+                    .background(.thinMaterial)
                     .ignoresSafeArea()
 
                 DetachedPanelView()
