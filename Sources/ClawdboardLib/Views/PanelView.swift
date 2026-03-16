@@ -17,9 +17,13 @@ public struct PanelView: View {
 
             // Usage limits (Claude API)
             if let limits = appState.usageLimits {
-                UsageLimitsView(limits: limits)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                UsageLimitsView(
+                    limits: limits,
+                    error: appState.usageLimitsError,
+                    onRefresh: { appState.refreshUsageLimits() }
+                )
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
 
             Divider()
