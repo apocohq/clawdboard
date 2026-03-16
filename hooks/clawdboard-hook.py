@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -102,6 +103,36 @@ def _load_model_cache() -> dict[str, int]:
         "claude-opus-4-1": 200000,
         "claude-haiku-4-5": 200000,
     }
+
+
+def get_github_repo(cwd: str) -> str | None:
+    """Return GitHub repo slug (e.g. 'user/repo') for the given directory, or None."""
+    if not cwd:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return None
+        url = result.stdout.strip()
+        if "github.com" not in url:
+            return None
+        # SSH: git@github.com:user/repo.git
+        if url.startswith("git@"):
+            path = url.split(":", 1)[-1]
+        else:
+            # HTTPS: https://github.com/user/repo[.git]
+            from urllib.parse import urlparse
+
+            path = urlparse(url).path.lstrip("/")
+        return path.removesuffix(".git") or None
+    except Exception:
+        return None
 
 
 def main() -> None:
@@ -274,6 +305,7 @@ def make_base_state(
         "session_id": session_id,
         "cwd": cwd,
         "project_name": project_name,
+        "github_repo": get_github_repo(cwd),
         "status": "working",
         "started_at": now,
         "updated_at": now,
@@ -301,6 +333,7 @@ def handle_session_start(
         "session_id": session_id,
         "cwd": cwd,
         "project_name": project_name,
+        "github_repo": get_github_repo(cwd),
         "status": "working",
         "model": data.get("model"),
         "git_branch": data.get("git_branch"),

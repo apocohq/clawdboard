@@ -216,6 +216,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// If non-nil, this session lives on a remote machine (SSH host identifier)
     public var remoteHost: String?
 
+    /// GitHub repo slug (e.g. "user/repo") if the cwd has a GitHub remote, nil otherwise
+    public var githubRepo: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -231,6 +234,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case pid
         case isHookTracked = "is_hook_tracked"
         case remoteHost = "remote_host"
+        case githubRepo = "github_repo"
     }
 
     public init(
@@ -247,7 +251,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         subagents: [Subagent]? = nil,
         pid: Int? = nil,
         isHookTracked: Bool = false,
-        remoteHost: String? = nil
+        remoteHost: String? = nil,
+        githubRepo: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -263,6 +268,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.pid = pid
         self.isHookTracked = isHookTracked
         self.remoteHost = remoteHost
+        self.githubRepo = githubRepo
     }
 
     /// Formatted context usage like "68%"
