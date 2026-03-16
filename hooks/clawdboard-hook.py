@@ -356,12 +356,17 @@ def handle_post_tool_use(
     now: str,
     claude_pid: int,
 ) -> None:
-    data = read_transcript_data(transcript_path, state_file)
     state = read_state(state_file)
     if state is None:
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
+
+    # Write "working" immediately so the UI updates before the slow transcript read
     state["status"] = "working"
     state["updated_at"] = now
+    write_state(state_file, state)
+
+    # Then read transcript data and write again with full info
+    data = read_transcript_data(transcript_path, state_file)
     merge_transcript_data(state, data)
     write_state(state_file, state)
 

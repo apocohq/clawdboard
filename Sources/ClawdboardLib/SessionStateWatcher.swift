@@ -38,6 +38,7 @@ public class SessionStateWatcher {
                 queue: .main
             )
             source.setEventHandler { [weak self] in
+                NSLog("[SessionWatcher] DispatchSource fired")
                 self?.notifyChanges()
             }
             source.setCancelHandler { [weak self] in
@@ -49,9 +50,11 @@ public class SessionStateWatcher {
             dispatchSource = source
         }
 
-        // Low-frequency cleanup timer for PID liveness checks only.
-        // Catches crashed sessions where SessionEnd hook didn't fire.
-        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) {
+        // Short poll timer as backup for coalesced DispatchSource events.
+        // DispatchSource may coalesce rapid writes (e.g. PreToolUse + Stop in quick succession),
+        // so this ensures updates are picked up within a few seconds.
+        // Also handles PID liveness cleanup for crashed sessions.
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) {
             [weak self] _ in
             self?.notifyChanges()
         }
@@ -67,7 +70,12 @@ public class SessionStateWatcher {
 
     /// Read all state files and notify
     private func notifyChanges() {
+        let start = CFAbsoluteTimeGetCurrent()
         let sessions = readAllSessions()
+        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+        if elapsed > 50 {
+            NSLog("[SessionWatcher] notifyChanges took %.0fms (%d sessions)", elapsed, sessions.count)
+        }
         onChange(sessions)
     }
 
