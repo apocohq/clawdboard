@@ -148,6 +148,7 @@ def main() -> None:
     agent_id: str = hook_input.get("agent_id", "")
     agent_type: str = hook_input.get("agent_type", "")
     prompt: str = hook_input.get("prompt", "")
+    model: str = hook_input.get("model", "")
     claude_pid = os.getppid()
 
     if not session_id:
@@ -172,6 +173,7 @@ def main() -> None:
             project_name,
             now,
             claude_pid,
+            model,
         )
     elif hook_event == "PreToolUse":
         handle_pre_tool_use(state_file, now)
@@ -327,6 +329,7 @@ def handle_session_start(
     project_name: str,
     now: str,
     claude_pid: int,
+    model: str = "",
 ) -> None:
     data = read_transcript_data(
         transcript_path, Path("/dev/null")
@@ -337,7 +340,7 @@ def handle_session_start(
         "project_name": project_name,
         "github_repo": get_github_repo(cwd),
         "status": "working",
-        "model": data.get("model"),
+        "model": data.get("model") or model or None,
         "git_branch": data.get("git_branch"),
         "slug": data.get("slug"),
         "context_pct": data.get("context_pct"),
