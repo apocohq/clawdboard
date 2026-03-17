@@ -199,12 +199,21 @@ class TestEventHandlers:
         state = json.loads(state_file.read_text())
         assert state["status"] == "needs_approval"
 
-    def test_notification_other(self, hook, tmp_path):
+    def test_notification_idle_skips_working(self, hook, tmp_path):
+        """idle_prompt must not clobber working state (async race fix)."""
         state_file = tmp_path / "s1.json"
         state_file.write_text(json.dumps({"session_id": "s1", "status": "working"}))
+        hook.handle_notification(state_file, "idle_prompt", NOW)
+        state = json.loads(state_file.read_text())
+        assert state["status"] == "working"
+
+    def test_notification_idle_sets_pending_waiting(self, hook, tmp_path):
+        """idle_prompt transitions non-working states to pending_waiting."""
+        state_file = tmp_path / "s1.json"
+        state_file.write_text(json.dumps({"session_id": "s1", "status": "waiting"}))
         hook.handle_notification(state_file, "other_type", NOW)
         state = json.loads(state_file.read_text())
-        assert state["status"] == "waiting"
+        assert state["status"] == "pending_waiting"
 
     def test_permission_request(self, hook, tmp_path):
         state_file = tmp_path / "s1.json"

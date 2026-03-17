@@ -173,23 +173,35 @@ public class HookManager {
         try! scriptSource("clawdboard-hook.py")
     }
 
-    /// Load a Python script from the hooks/ directory.
-    /// Searches relative to the executable (repo layout) then relative to cwd.
+    /// Load a Python script by name.
+    /// Checks SPM bundle resources first, then falls back to repo-relative paths.
     public static func scriptSource(_ filename: String) throws -> String {
+        // 1. SPM bundle resource (works in all build/install configurations)
+        if let url = Bundle.module.url(
+            forResource: (filename as NSString).deletingPathExtension,
+            withExtension: (filename as NSString).pathExtension
+        ) {
+            if let content = try? String(contentsOf: url, encoding: .utf8) {
+                return content
+            }
+        }
+
+        // 2. Repo layout fallback
         let executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         let repoPath =
             executableURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("hooks/\(filename)")
+            .appendingPathComponent("Sources/ClawdboardLib/Resources/\(filename)")
 
         if let content = try? String(contentsOf: repoPath, encoding: .utf8) {
             return content
         }
 
+        // 3. CWD fallback
         let cwdPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("hooks/\(filename)")
+            .appendingPathComponent("Sources/ClawdboardLib/Resources/\(filename)")
         if let content = try? String(contentsOf: cwdPath, encoding: .utf8) {
             return content
         }
@@ -203,7 +215,7 @@ public class HookManager {
         public var errorDescription: String? {
             switch self {
             case .scriptNotFound(let name):
-                return "Hook script '\(name)' not found in hooks/ directory"
+                return "Hook script '\(name)' not found in bundle or Resources/"
             }
         }
     }

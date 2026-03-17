@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-HOOK_PATH = Path(__file__).parent.parent.parent / "hooks" / "clawdboard-hook.py"
+HOOK_PATH = (
+    Path(__file__).parent.parent.parent
+    / "Sources"
+    / "ClawdboardLib"
+    / "Resources"
+    / "clawdboard-hook.py"
+)
 
 
 @pytest.fixture()

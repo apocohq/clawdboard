@@ -20,9 +20,11 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
-# Copy hook script
-cp hooks/clawdboard-hook.py "${RESOURCES_DIR}/clawdboard-hook.py"
-chmod +x "${RESOURCES_DIR}/clawdboard-hook.py"
+# Copy SPM resource bundle (contains hook scripts for HookManager)
+BUNDLE_PATH="${BUILD_DIR}/Clawdboard_ClawdboardLib.bundle"
+if [ -d "$BUNDLE_PATH" ]; then
+    cp -R "$BUNDLE_PATH" "${RESOURCES_DIR}/"
+fi
 
 # Write Info.plist
 cat > "${CONTENTS_DIR}/Info.plist" << 'PLIST'

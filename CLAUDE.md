@@ -24,13 +24,13 @@ mise run lint     # Check formatting + lint
 
 - **SPM library + executable split**: `ClawdboardLib` (all code) + `Clawdboard` (thin `@main` entry point) + `ClawdboardTests` (imports ClawdboardLib). This is required because SPM executable targets can't be imported by test targets.
 - **Swift 5 language mode** in Swift 6 toolchain (avoids strict concurrency fights for a PoC).
-- **Hooks-first session discovery**: Claude hooks write state files to `~/.clawdboard/sessions/`. The Swift app just reads JSON — all JSONL parsing, cost calculation, and token counting happens in the hook script (`hooks/clawdboard-hook.py`).
+- **Hooks-first session discovery**: Claude hooks write state files to `~/.clawdboard/sessions/`. The Swift app just reads JSON — all JSONL parsing, cost calculation, and token counting happens in the hook script (`Sources/ClawdboardLib/Resources/clawdboard-hook.py`).
 - **Single `@Observable` AppState** owned by the App struct, distributed via `.environment()`.
 - **3s debounce** on `Stop` hook (pending_waiting -> waiting). **30s staleness** heuristic for interrupted sessions.
 
 ## Key Paths
 
-- `hooks/clawdboard-hook.py` — Python script installed as Claude hook
+- `Sources/ClawdboardLib/Resources/clawdboard-hook.py` — Python script installed as Claude hook
 - `Sources/ClawdboardLib/` — all library code (models, state, views, discovery)
 - `Sources/Clawdboard/ClawdboardApp.swift` — app entry point
 - `scripts/bundle.sh` — creates `.app` bundle from release binary

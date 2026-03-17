@@ -40,7 +40,7 @@ run = """
 #!/bin/bash
 set -euo pipefail
 swift format format --in-place --recursive Sources/ Tests/
-ruff format hooks/ scripts/
+ruff format Sources/ClawdboardLib/Resources/ scripts/
 """
 
 [tasks.lint]
@@ -54,9 +54,9 @@ if [ -d /Applications/Xcode.app ]; then
 else
     echo "⚠ swiftlint skipped (requires Xcode, not just Command Line Tools)"
 fi
-ruff check hooks/ scripts/
-ruff format --check hooks/ scripts/
-ty check hooks/ scripts/
+ruff check Sources/ClawdboardLib/Resources/ scripts/
+ruff format --check Sources/ClawdboardLib/Resources/ scripts/
+ty check Sources/ClawdboardLib/Resources/ scripts/
 """
 
 [tasks.test-py]
@@ -85,8 +85,9 @@ run = """
 #!/bin/bash
 set -euo pipefail
 
-SWIFT_FILES=$(echo "$STAGED" | grep '\\.swift$' || true)
-PY_FILES=$(echo "$STAGED" | grep '\\.py$' || true)
+# Filter to existing files only (excludes deletions)
+SWIFT_FILES=$(echo "$STAGED" | grep '\\.swift$' | while read -r f; do [ -f "$f" ] && echo "$f"; done || true)
+PY_FILES=$(echo "$STAGED" | grep '\\.py$' | while read -r f; do [ -f "$f" ] && echo "$f"; done || true)
 
 if [ -z "$SWIFT_FILES" ] && [ -z "$PY_FILES" ]; then
     echo "No staged Swift or Python files, skipping checks."

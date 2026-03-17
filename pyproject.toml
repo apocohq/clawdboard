@@ -22,4 +22,4 @@ select = ["E", "F", "I", "W", "ANN"]
 
 [tool.pytest.ini_options]
 testpaths = ["Tests/python"]
-pythonpath = ["hooks"]
+pythonpath = ["Sources/ClawdboardLib/Resources"]
