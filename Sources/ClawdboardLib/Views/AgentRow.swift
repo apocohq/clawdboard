@@ -6,17 +6,20 @@ public struct AgentRow: View {
     public let isExpanded: Bool
     public let onToggle: () -> Void
     public var onFocusiTerm2: (() -> Void)?
+    public var onDelete: (() -> Void)?
 
     public init(
         session: AgentSession,
         isExpanded: Bool,
         onToggle: @escaping () -> Void,
-        onFocusiTerm2: (() -> Void)? = nil
+        onFocusiTerm2: (() -> Void)? = nil,
+        onDelete: (() -> Void)? = nil
     ) {
         self.session = session
         self.isExpanded = isExpanded
         self.onToggle = onToggle
         self.onFocusiTerm2 = onFocusiTerm2
+        self.onDelete = onDelete
     }
 
     public var body: some View {
@@ -71,15 +74,41 @@ public struct AgentRow: View {
                 Spacer()
 
                 HStack(spacing: 0) {
+                    if session.displayStatus == .abandoned, let onDelete = onDelete {
+                        Button(action: onDelete) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hovering in
+                            if hovering {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                        .help("Delete session")
+                    }
+
                     if let onFocusiTerm2 = onFocusiTerm2 {
                         Button(action: onFocusiTerm2) {
                             Image(systemName: "arrow.up.forward.app")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
-                                .frame(width: 20, height: 28)
+                                .frame(width: 28, height: 28)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .onHover { hovering in
+                            if hovering {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
                         .help("Focus in iTerm2")
                     }
 
@@ -99,6 +128,15 @@ public struct AgentRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { onToggle() }
+            .contextMenu {
+                if let onDelete = onDelete {
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Delete Session", systemImage: "trash")
+                    }
+                }
+            }
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
 

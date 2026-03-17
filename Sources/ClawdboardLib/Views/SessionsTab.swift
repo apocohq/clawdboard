@@ -35,7 +35,8 @@ public struct SessionsTab: View {
                             onToggle: { appState.toggleExpanded(sessionId: session.id) },
                             onFocusiTerm2: session.iterm2SessionId != nil
                                 ? { appState.focusITerm2Session(session) }
-                                : nil
+                                : nil,
+                            onDelete: { appState.deleteSession(session.id) }
                         )
                     }
                 }

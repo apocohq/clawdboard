@@ -36,6 +36,11 @@ public class AppState {
 
     private static let remoteHostsKey = "remoteHosts"
 
+    private let sessionsDir: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".clawdboard/sessions")
+    }()
+
     public init() {
         loadRemoteHosts()
     }
@@ -97,6 +102,14 @@ public class AppState {
         rebuildSessions()
     }
 
+    // MARK: - Session Deletion
+
+    /// Delete a session's state file, removing it from the UI.
+    public func deleteSession(_ sessionId: String) {
+        let file = sessionsDir.appendingPathComponent("\(sessionId).json")
+        try? FileManager.default.removeItem(at: file)
+    }
+
     // MARK: - Persistence
 
     private func saveRemoteHosts() {
@@ -156,7 +169,23 @@ public class AppState {
             processSession(session, now: now)
         }
 
-        sessions = processedLocal + processedRemote
+        var all = processedLocal + processedRemote
+
+        // Auto-delete stale sessions if configured (0 = never)
+        let autoDeleteHours = UserDefaults.standard.double(forKey: "autoDeleteHours")
+        if autoDeleteHours > 0 {
+            all.removeAll { session in
+                guard let updated = session.updatedAt ?? session.startedAt else { return false }
+                let age = now.timeIntervalSince(updated) / 3600.0
+                if age >= autoDeleteHours {
+                    deleteSession(session.sessionId)
+                    return true
+                }
+                return false
+            }
+        }
+
+        sessions = all
     }
 
     // MARK: - Session Processing
