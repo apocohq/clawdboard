@@ -14,6 +14,8 @@ struct SessionStateWatcherTests {
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpDir) }
 
+        let formatter = ISO8601DateFormatter()
+        let now = formatter.string(from: Date())
         let stateJSON = """
             {
                 "session_id": "test-123",
@@ -21,10 +23,9 @@ struct SessionStateWatcherTests {
                 "project_name": "test",
                 "status": "working",
                 "model": "claude-opus-4-6",
-                "cost_usd": 0.50,
                 "context_pct": 42.0,
-                "started_at": "2026-03-12T08:00:00Z",
-                "updated_at": "2026-03-12T09:00:00Z",
+                "started_at": "\(now)",
+                "updated_at": "\(now)",
                 "is_hook_tracked": true
             }
             """
@@ -40,7 +41,6 @@ struct SessionStateWatcherTests {
         #expect(sessions[0].sessionId == "test-123")
         #expect(sessions[0].status == .working)
         #expect(sessions[0].model == "claude-opus-4-6")
-        #expect(sessions[0].costUsd == 0.50)
         #expect(sessions[0].contextPct == 42.0)
     }
 

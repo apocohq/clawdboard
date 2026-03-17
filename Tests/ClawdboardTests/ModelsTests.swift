@@ -35,15 +35,6 @@ struct ModelsTests {
         #expect(waiting.displayStatus == .waiting)
     }
 
-    @Test("formattedCost formats dollars correctly")
-    func formattedCost() {
-        let session = AgentSession(sessionId: "1", cwd: "/a", projectName: "a", costUsd: 1.5, isHookTracked: true)
-        #expect(session.formattedCost == "$1.50")
-
-        let noCost = AgentSession(sessionId: "2", cwd: "/b", projectName: "b", isHookTracked: false)
-        #expect(noCost.formattedCost == "—")
-    }
-
     @Test("formattedContext formats percentage correctly")
     func formattedContext() {
         let session = AgentSession(sessionId: "1", cwd: "/a", projectName: "a", contextPct: 68.5, isHookTracked: true)
@@ -82,7 +73,6 @@ struct ModelsTests {
                 "model": "claude-opus-4-6",
                 "git_branch": "main",
                 "slug": "test-slug",
-                "cost_usd": 1.47,
                 "context_pct": 68.5,
                 "input_tokens": 137000,
                 "output_tokens": 42000,
@@ -100,7 +90,6 @@ struct ModelsTests {
         #expect(session.sessionId == "42ac740e")
         #expect(session.status == .waiting)
         #expect(session.model == "claude-opus-4-6")
-        #expect(session.costUsd == 1.47)
         #expect(session.contextPct == 68.5)
         #expect(session.isHookTracked == true)
     }

@@ -70,28 +70,30 @@ public struct AgentRow: View {
 
                 Spacer()
 
-                if let onFocusiTerm2 = onFocusiTerm2 {
-                    Button(action: onFocusiTerm2) {
-                        Image(systemName: "arrow.up.forward.app")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
-                            .contentShape(Rectangle())
+                HStack(spacing: 0) {
+                    if let onFocusiTerm2 = onFocusiTerm2 {
+                        Button(action: onFocusiTerm2) {
+                            Image(systemName: "arrow.up.forward.app")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Focus in iTerm2")
                     }
-                    .buttonStyle(.plain)
-                    .help("Focus in iTerm2")
-                }
 
-                if session.isHookTracked {
-                    VStack(alignment: .trailing, spacing: 1) {
+                    if session.isHookTracked {
                         Text(session.formattedContext)
-                            .font(.caption2)
+                            .font(.caption2.monospacedDigit())
                             .foregroundStyle(.secondary)
+                            .frame(width: 32, alignment: .trailing)
+                    } else {
+                        Text("—")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 32, alignment: .trailing)
                     }
-                } else {
-                    Text("—")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
                 }
 
             }

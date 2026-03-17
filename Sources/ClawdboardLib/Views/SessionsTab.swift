@@ -6,7 +6,7 @@ public struct SessionsTab: View {
 
     public init() {}
 
-    /// Sessions grouped and sorted by urgency within each group.
+    /// Sessions grouped alphabetically (stable order).
     private var groupedSessions: [(key: String, sessions: [AgentSession])] {
         let dict = Dictionary(grouping: appState.sortedSessions) { session in
             session.githubRepo ?? session.projectName
@@ -14,12 +14,7 @@ public struct SessionsTab: View {
         return
             dict
             .map { (key: $0.key, sessions: $0.value) }
-            .sorted { a, b in
-                let aOrder = a.sessions.first?.displayStatus.sortOrder ?? 99
-                let bOrder = b.sessions.first?.displayStatus.sortOrder ?? 99
-                if aOrder != bOrder { return aOrder < bOrder }
-                return a.key < b.key
-            }
+            .sorted { $0.key < $1.key }
     }
 
     public var body: some View {

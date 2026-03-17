@@ -6,22 +6,26 @@ import Testing
 @Suite("AppState")
 struct AppStateTests {
 
-    @Test("sortedSessions orders by urgency: waiting > working > unknown")
-    func sortedSessionsByUrgency() {
+    @Test("sortedSessions orders by start time, newest first")
+    func sortedSessionsByStartTime() {
         let state = AppState()
         let now = Date()
         state.sessions = [
             AgentSession(
-                sessionId: "1", cwd: "/a", projectName: "a", status: .working, updatedAt: now, isHookTracked: true),
-            AgentSession(sessionId: "2", cwd: "/b", projectName: "b", status: .unknown, isHookTracked: false),
+                sessionId: "1", cwd: "/a", projectName: "a",
+                startedAt: now.addingTimeInterval(-3600), isHookTracked: true),
             AgentSession(
-                sessionId: "3", cwd: "/c", projectName: "c", status: .waiting, updatedAt: now, isHookTracked: true),
+                sessionId: "2", cwd: "/b", projectName: "b",
+                startedAt: now, isHookTracked: true),
+            AgentSession(
+                sessionId: "3", cwd: "/c", projectName: "c",
+                startedAt: now.addingTimeInterval(-1800), isHookTracked: true),
         ]
 
         let sorted = state.sortedSessions
-        #expect(sorted[0].sessionId == "3")  // waiting first
-        #expect(sorted[1].sessionId == "1")  // working second
-        #expect(sorted[2].sessionId == "2")  // unknown last
+        #expect(sorted[0].sessionId == "2")  // newest
+        #expect(sorted[1].sessionId == "3")  // middle
+        #expect(sorted[2].sessionId == "1")  // oldest
     }
 
     @Test("waitingCount counts only waiting sessions")
@@ -47,15 +51,15 @@ struct AppStateTests {
         #expect(state.workingCount == 2)
     }
 
-    @Test("totalCost sums all session costs")
-    func totalCost() {
+    @Test("activeSessions excludes unknown and abandoned")
+    func activeSessions() {
         let state = AppState()
         state.sessions = [
-            AgentSession(sessionId: "1", cwd: "/a", projectName: "a", costUsd: 1.50, isHookTracked: true),
-            AgentSession(sessionId: "2", cwd: "/b", projectName: "b", costUsd: 2.25, isHookTracked: true),
-            AgentSession(sessionId: "3", cwd: "/c", projectName: "c", isHookTracked: false),  // nil cost
+            AgentSession(sessionId: "1", cwd: "/a", projectName: "a", status: .working, isHookTracked: true),
+            AgentSession(sessionId: "2", cwd: "/b", projectName: "b", status: .unknown, isHookTracked: false),
+            AgentSession(sessionId: "3", cwd: "/c", projectName: "c", status: .waiting, isHookTracked: true),
         ]
-        #expect(state.totalCost == 3.75)
+        #expect(state.activeSessions.count == 2)
     }
 
     @Test("toggleExpanded toggles session expansion")

@@ -198,13 +198,10 @@ public class AppState {
 
     // MARK: - Computed Properties
 
-    /// Sessions sorted by urgency: waiting > working > unknown
+    /// Sessions sorted by start time, newest first (stable order).
     public var sortedSessions: [AgentSession] {
         sessions.sorted { a, b in
-            let aOrder = a.displayStatus.sortOrder
-            let bOrder = b.displayStatus.sortOrder
-            if aOrder != bOrder { return aOrder < bOrder }
-            return (a.updatedAt ?? .distantPast) > (b.updatedAt ?? .distantPast)
+            (a.startedAt ?? .distantPast) > (b.startedAt ?? .distantPast)
         }
     }
 
