@@ -1,5 +1,20 @@
 import SwiftUI
 
+// MARK: - Status Display Color
+
+extension AgentStatus {
+    /// The color associated with this status for use in labels, dots, and pills.
+    public var displayColor: Color {
+        switch self {
+        case .working, .pendingWaiting: return .green
+        case .needsApproval: return .red
+        case .waiting: return .orange
+        case .abandoned: return .gray.opacity(0.4)
+        case .unknown: return .gray
+        }
+    }
+}
+
 // MARK: - Status Dot
 
 /// Colored circle indicating session status. Pulses when working.
@@ -31,17 +46,11 @@ public struct StatusDot: View {
     }
 
     private var shouldPulse: Bool {
-        status == .working || status == .needsApproval
+        status == .needsApproval
     }
 
     private var color: Color {
-        switch status {
-        case .working, .pendingWaiting: return .green
-        case .needsApproval: return .red
-        case .waiting: return .orange
-        case .abandoned: return .gray.opacity(0.4)
-        case .unknown: return .gray
-        }
+        status.displayColor
     }
 }
 
@@ -72,9 +81,9 @@ public struct ContextBar: View {
     }
 
     private func barColor(for pct: Double) -> Color {
-        if pct >= 80 { return .red }
-        if pct >= 60 { return .orange }
-        return .blue
+        if pct >= 90 { return .red }
+        if pct >= 70 { return .orange }
+        return .green
     }
 }
 

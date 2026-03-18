@@ -22,9 +22,9 @@ public struct SessionsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(groups, id: \.key) { group in
-                    Text(group.key)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    Text(group.key.split(separator: "/").last.map(String.init) ?? group.key)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
                         .padding(.top, group.key == groups.first?.key ? 0 : 6)

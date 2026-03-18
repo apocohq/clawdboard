@@ -28,6 +28,10 @@ mise run lint     # Check formatting + lint
 - **Single `@Observable` AppState** owned by the App struct, distributed via `.environment()`.
 - **3s debounce** on `Stop` hook (pending_waiting -> waiting). **30s staleness** heuristic for interrupted sessions.
 
+## Design
+
+- **`docs/DESIGN.md`** is the design manual — colors, typography, layout constants, icons, animations, and every visual component. **Before making any UI/design changes, consult this document first, discuss the change, and update `docs/DESIGN.md` to reflect the new state.** Code and design doc must stay in sync.
+
 ## Key Paths
 
 - `Sources/ClawdboardLib/Resources/clawdboard-hook.py` — Python script installed as Claude hook
