@@ -42,6 +42,28 @@ public class RemoteSessionWatcher {
         hosts = enabledHosts
     }
 
+    /// Delete a session file on a remote host via SSH.
+    public func deleteSession(_ sessionId: String, on host: String) {
+        // Validate sessionId is a safe filename (UUID format) before passing to SSH.
+        let safeChars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
+        guard sessionId.unicodeScalars.allSatisfy({ safeChars.contains($0) }) else { return }
+
+        DispatchQueue.global(qos: .utility).async {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+            task.arguments = [
+                "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=yes",
+                host,
+                "rm -f ~/.clawdboard/sessions/\(sessionId).json",
+            ]
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+        }
+    }
+
     public func stop() {
         for timer in timers.values {
             timer.invalidate()

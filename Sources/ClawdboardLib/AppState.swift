@@ -115,8 +115,16 @@ public class AppState {
 
     /// Delete a session's state file, removing it from the UI.
     public func deleteSession(_ sessionId: String) {
-        let file = sessionsDir.appendingPathComponent("\(sessionId).json")
-        try? FileManager.default.removeItem(at: file)
+        let remoteHost = sessions.first(where: { $0.sessionId == sessionId })?.remoteHost
+
+        if let host = remoteHost {
+            remoteSessions[host]?.removeAll { $0.sessionId == sessionId }
+            rebuildSessions()
+            remoteWatcher?.deleteSession(sessionId, on: host)
+        } else {
+            let file = sessionsDir.appendingPathComponent("\(sessionId).json")
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     // MARK: - Persistence
