@@ -32,9 +32,9 @@ public struct AgentRow: View {
                 StatusDot(status: session.displayStatus)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(session.firstPrompt ?? session.projectName)
+                    Text(session.title ?? session.projectName)
                         .font(
-                            session.firstPrompt != nil
+                            session.title != nil
                                 ? .system(.body, weight: .medium)
                                 : .system(.body, design: .monospaced, weight: .medium)
                         )
