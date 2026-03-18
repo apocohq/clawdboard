@@ -48,7 +48,6 @@ public struct AgentRow: View {
                             Text("·")
                         }
                         Text(session.displayStatus.displayLabel)
-                            .foregroundStyle(session.displayStatus.displayColor)
                         if session.isHookTracked {
                             Text("·")
                             Text(session.shortModelName)

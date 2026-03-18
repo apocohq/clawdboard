@@ -34,7 +34,7 @@ All usage indicators (context bar, usage progress bar) share the same color scal
 
 | Range | Color | Meaning |
 |-------|-------|---------|
-| 0–69% | `.green` | Healthy |
+| 0–69% | `.blue` | Healthy |
 | 70–89% | `.orange` | Elevated — worth noting |
 | 90%+ | `.red` | Critical — action likely needed |
 
@@ -90,7 +90,7 @@ Colored circle indicating session status.
 | Size | 8×8pt |
 | Shape | Filled `Circle()` |
 
-Colors follow the Status Colors table. Only `.needsApproval` pulses (opacity 1.0↔0.4, 1s ease-in-out, repeats forever) — reserving the animation as an attention signal for user action required. All other states are static.
+Colors follow the Status Colors table. Only approval status pulses (opacity 1.0↔0.4, 1s ease-in-out, repeats forever) — reserving the animation as an attention signal for user action required. All other states are static.
 
 ---
 
@@ -146,9 +146,9 @@ Horizontal progress bar for account usage limits.
 **Bar color**: Uses the shared usage gauge color scale (see Color System).
 
 **Layout** (VStack, 3pt spacing):
-- Header row: Window label ("5h" / "7d") in `.caption.weight(.semibold)`, `.secondary` | Spacer | Percentage in `.caption.monospacedDigit().weight(.semibold)`, bar color
+- Header row: Percentage in `.caption.monospacedDigit().weight(.semibold)`, bar color | Spacer | Window label ("5h" / "7d") in `.caption.weight(.semibold)`, `.secondary`
 - Progress bar with estimated marker overlay
-- Footer row: Reset time in `.caption2.monospacedDigit()`, `.tertiary` | Spacer | Estimated usage (`est N%`) in `.caption2.monospacedDigit()`, `.secondary`
+- Footer row: Estimated usage (`est N%`) in `.caption2.monospacedDigit()`, `.secondary` | Spacer | Reset time in `.caption2.monospacedDigit()`, `.tertiary`
 
 Two windows side by side in an HStack with 24pt spacing.
 
@@ -171,7 +171,7 @@ Single session row with expand/collapse.
 
 **Title**: `.system(.body, weight: .medium)` — monospaced design when showing project path, proportional when showing first prompt. Single line, truncated.
 
-**Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, **status label** (first, uses status color), model, branch, idle time, subagent count.
+**Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
 
 **Action buttons** (right side, HStack spacing 0):
 - Focus iTerm2: `apple.terminal` at `.body`, `.secondary`

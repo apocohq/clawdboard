@@ -83,7 +83,7 @@ public struct ContextBar: View {
     private func barColor(for pct: Double) -> Color {
         if pct >= 90 { return .red }
         if pct >= 70 { return .orange }
-        return .green
+        return .blue
     }
 }
 
@@ -126,13 +126,13 @@ struct UsageWindowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(label)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
                 Text(String(format: "%.0f%%", window.utilization))
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(barColor)
+                Spacer()
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
 
             GeometryReader { geometry in
@@ -157,13 +157,13 @@ struct UsageWindowView: View {
             .frame(height: 8)
 
             HStack {
-                Text("resets \(window.remainingText)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-                Spacer()
                 Text(String(format: "est %.0f%%", window.estimated))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                Spacer()
+                Text("resets \(window.remainingText)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
             }
         }
         .frame(maxWidth: .infinity)
@@ -172,7 +172,7 @@ struct UsageWindowView: View {
     private var barColor: Color {
         if window.utilization >= 90 { return .red }
         if window.utilization >= 70 { return .orange }
-        return .green
+        return .blue
     }
 }
 
