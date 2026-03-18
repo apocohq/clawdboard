@@ -36,7 +36,8 @@ public struct SessionsTab: View {
                             onFocusiTerm2: session.iterm2SessionId != nil
                                 ? { appState.focusITerm2Session(session) }
                                 : nil,
-                            onFocusVSCode: appState.ideLockInfo(for: session) != nil
+                            onFocusVSCode: session.iterm2SessionId == nil
+                                && appState.ideLockInfo(for: session) != nil
                                 ? { appState.focusVSCodeSession(session) }
                                 : nil,
                             onDelete: { appState.deleteSession(session.id) }
