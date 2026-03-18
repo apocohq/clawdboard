@@ -46,4 +46,13 @@ mise run format    # Auto-fix formatting
 mise run lint      # Check formatting + lint
 ```
 
+### Watch Mode
+
+To run the app with auto-restart on every code change:
+
+```bash
+brew install watchexec  # one-time setup
+watchexec --restart --exts swift,py --watch Sources/ -- swift run Clawdboard
+```
+
 See [CLAUDE.md](CLAUDE.md) for architecture details and conventions.

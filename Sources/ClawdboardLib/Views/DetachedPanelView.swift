@@ -4,6 +4,7 @@ import SwiftUI
 /// actions in the titlebar instead of a footer.
 public struct DetachedPanelView: View {
     @AppStorage("showFloatingWindow") private var showFloatingWindow = false
+    @Environment(AppState.self) private var appState
     @Environment(\.dismissWindow) private var dismissWindow
 
     public init() {}
@@ -15,6 +16,14 @@ public struct DetachedPanelView: View {
         .frame(width: 420)
         .frame(maxHeight: .infinity, alignment: .top)
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                if let limits = appState.usageLimits {
+                    Button { appState.refreshUsageLimits() } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .help("Usage updated \(PanelView.updatedText(limits.updatedAt))")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 settingsMenu
             }

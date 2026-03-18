@@ -172,7 +172,7 @@ public enum AgentStatus: String, Codable, CaseIterable {
         switch self {
         case .working: return "Working"
         case .pendingWaiting: return "Working"  // Show as working until debounce completes
-        case .needsApproval: return "Needs Approval"
+        case .needsApproval: return "Approval"
         case .waiting: return "Waiting"
         case .unknown: return "Unknown"
         case .abandoned: return "Idle"
