@@ -56,6 +56,7 @@ public struct AgentRow: View {
                             Text("·")
                         }
                         Text(session.displayStatus.displayLabel)
+                            .foregroundStyle(session.displayStatus.displayColor)
                         if session.displayStatus == .abandoned,
                             let updatedAt = session.updatedAt
                         {
@@ -98,7 +99,7 @@ public struct AgentRow: View {
 
                     if let onFocusiTerm2 = onFocusiTerm2 {
                         Button(action: onFocusiTerm2) {
-                            Image(systemName: "arrow.up.forward.app")
+                            Image(systemName: "terminal")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 28, height: 28)
@@ -117,7 +118,7 @@ public struct AgentRow: View {
 
                     if let onFocusVSCode = onFocusVSCode {
                         Button(action: onFocusVSCode) {
-                            Image(systemName: "arrow.up.forward.app")
+                            Image(systemName: "curlybraces")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 28, height: 28)
@@ -137,7 +138,7 @@ public struct AgentRow: View {
                     if session.isHookTracked {
                         Text(session.formattedContext)
                             .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(contextColor)
                             .frame(width: 32, alignment: .trailing)
                     } else {
                         Text("—")
@@ -173,7 +174,15 @@ public struct AgentRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(.quaternary.opacity(0.5))
         )
+        .opacity(session.isHookTracked ? 1.0 : 0.6)
         .animation(.easeInOut(duration: 0.15), value: isExpanded)
+    }
+
+    private var contextColor: Color {
+        guard let pct = session.contextPct else { return .secondary }
+        if pct >= 90 { return .red }
+        if pct >= 70 { return .orange }
+        return .secondary
     }
 
     @ViewBuilder
