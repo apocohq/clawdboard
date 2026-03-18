@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -40,6 +41,14 @@ public class AppState {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".clawdboard/sessions")
     }()
+
+    private let ideLockDir: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/ide")
+    }()
+
+    /// All parsed IDE lock files.
+    private var ideLocks: [IdeLockInfo] = []
 
     public init() {
         loadRemoteHosts()
@@ -155,9 +164,53 @@ public class AppState {
         usageLimitsWatcher?.refresh()
     }
 
+    // MARK: - IDE Lock Files
+
+    /// Scan ~/.claude/ide/*.lock for IDE window info.
+    private func refreshIdeLocks() {
+        var locks: [IdeLockInfo] = []
+        let fm = FileManager.default
+        guard
+            let contents = try? fm.contentsOfDirectory(
+                at: ideLockDir, includingPropertiesForKeys: nil)
+        else {
+            ideLocks = locks
+            return
+        }
+        let decoder = JSONDecoder()
+        for url in contents where url.pathExtension == "lock" {
+            guard let data = try? Data(contentsOf: url),
+                let info = try? decoder.decode(IdeLockInfo.self, from: data)
+            else { continue }
+            locks.append(info)
+        }
+        ideLocks = locks
+    }
+
+    /// Match a session to an IDE window by checking if its cwd falls within
+    /// one of the lock file's workspace folders. Picks the most specific
+    /// (longest) match so worktrees are distinguished from their parent repo.
+    public func ideLockInfo(for session: AgentSession) -> IdeLockInfo? {
+        let cwd = session.cwd
+        guard !cwd.isEmpty else { return nil }
+
+        var bestMatch: IdeLockInfo?
+        var bestLength = 0
+
+        for lock in ideLocks {
+            for folder in lock.workspaceFolders {
+                guard cwd.hasPrefix(folder), folder.count > bestLength else { continue }
+                bestMatch = lock
+                bestLength = folder.count
+            }
+        }
+        return bestMatch
+    }
+
     // MARK: - Session Merging
 
     private func rebuildSessions() {
+        refreshIdeLocks()
         let now = Date()
 
         let processedLocal = localSessions.compactMap { session -> AgentSession? in
@@ -277,6 +330,79 @@ public class AppState {
             try? task.run()
             task.waitUntilExit()
         }
+    }
+
+    public func focusVSCodeSession(_ session: AgentSession) {
+        guard let lock = ideLockInfo(for: session) else { return }
+
+        // Use workspace folder from lock file, fall back to session cwd.
+        let folderPath = lock.workspaceFolders.first ?? session.cwd
+        guard !folderPath.isEmpty else { return }
+
+        // If the folder contains a .code-workspace file, pass that instead so
+        // the `code` CLI focuses the existing workspace window rather than
+        // opening the folder as a new window.
+        let targetPath = Self.findCodeWorkspace(in: folderPath) ?? folderPath
+
+        // Derive CLI command from IDE name.
+        let command = Self.cliCommand(for: lock.ideName)
+
+        let fm = FileManager.default
+        let candidates = [
+            "/usr/local/bin/\(command)",
+            "/opt/homebrew/bin/\(command)",
+        ]
+
+        guard let executablePath = candidates.first(where: { fm.isExecutableFile(atPath: $0) })
+        else {
+            DispatchQueue.main.async {
+                Self.showVSCodeCLIAlert(command: command)
+            }
+            return
+        }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executablePath)
+        task.arguments = [targetPath]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? task.run()
+            task.waitUntilExit()
+        }
+    }
+
+    /// Map IDE name from the lock file to the corresponding CLI command.
+    private static func cliCommand(for ideName: String) -> String {
+        let lower = ideName.lowercased()
+        if lower.contains("insiders") { return "code-insiders" }
+        if lower.contains("cursor") { return "cursor" }
+        return "code"
+    }
+
+    /// Look for a single `.code-workspace` file in the given directory.
+    private static func findCodeWorkspace(in folderPath: String) -> String? {
+        let url = URL(fileURLWithPath: folderPath)
+        guard
+            let contents = try? FileManager.default.contentsOfDirectory(
+                at: url, includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+        else { return nil }
+        let workspaceFiles = contents.filter { $0.pathExtension == "code-workspace" }
+        // Only use it if there's exactly one — ambiguous otherwise.
+        return workspaceFiles.count == 1 ? workspaceFiles[0].path : nil
+    }
+
+    private static func showVSCodeCLIAlert(command: String) {
+        let alert = NSAlert()
+        alert.messageText = "'\(command)' command not found"
+        alert.informativeText =
+            "Install it from VS Code: open the Command Palette (Cmd+Shift+P) "
+            + "and run \"Shell Command: Install '\(command)' command in PATH\"."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }
 

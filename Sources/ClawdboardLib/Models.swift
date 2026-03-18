@@ -1,5 +1,17 @@
 import Foundation
 
+// MARK: - IDE Lock Info
+
+/// Data from a ~/.claude/ide/<pid>.lock file identifying an IDE window.
+public struct IdeLockInfo: Codable {
+    public let pid: Int
+    public let workspaceFolders: [String]
+    public let ideName: String
+    public let transport: String?
+    public let runningInWindows: Bool?
+    public let authToken: String?
+}
+
 // MARK: - Remote Host
 
 /// A remote machine to monitor for Claude Code sessions via SSH.
