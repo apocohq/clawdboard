@@ -303,7 +303,7 @@ struct MenuBarLabel: View {
             } else {
                 Image(systemName: "apple.terminal")
             }
-        } else if let image = Self.renderStatusImage(
+        } else if let image = Self.renderDotsImage(
             approval: approval, waiting: waiting, working: working,
             useRedYellowMode: useRedYellowMode,
             usagePct: showRing ? usagePct : nil
@@ -381,7 +381,10 @@ struct MenuBarLabel: View {
 
     /// Render one colored dot per active session, ordered by urgency.
     /// Caps at maxDots to keep menu bar compact.
-    private static func renderStatusImage(
+    /// The usage ring is rendered as a separate template image, then composited
+    /// so macOS applies the correct wallpaper-aware tinting to it while the
+    /// colored dots remain untouched.
+    private static func renderDotsImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,
         usagePct: CGFloat? = nil
@@ -424,12 +427,16 @@ struct MenuBarLabel: View {
             NSBezierPath(ovalIn: dotRect).fill()
         }
 
-        // Optional usage ring
+        // Draw the usage ring using the menu bar's resolved foreground color.
+        // We find the actual NSStatusBarButton to read its effectiveAppearance,
+        // which accounts for wallpaper-driven tinting — not just system dark mode.
         if let pct = usagePct {
+            let ringColor = statusBarForegroundColor()
             let ringX = dotsWidth + ringSpacing + ringDiameter / 2
             drawRing(
                 center: NSPoint(x: ringX, y: menuBarHeight / 2),
-                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct
+                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct,
+                color: ringColor
             )
         }
 
@@ -439,5 +446,21 @@ struct MenuBarLabel: View {
         image.addRepresentation(rep)
         image.isTemplate = false
         return image
+    }
+
+    /// Resolve the correct foreground color for menu bar items.
+    /// Finds the NSStatusBarWindow (created by macOS for each status item) and reads
+    /// its effectiveAppearance, which is set based on the wallpaper behind the menu bar
+    /// — not just system-wide dark/light mode.
+    private static func statusBarForegroundColor() -> NSColor {
+        for window in NSApp.windows
+        where String(describing: type(of: window)).contains("StatusBar") {
+            let appearance = window.effectiveAppearance
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark ? .white : .black
+        }
+        // Fallback: use app-level appearance
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark ? .white : .black
     }
 }
