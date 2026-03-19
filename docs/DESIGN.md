@@ -340,3 +340,15 @@ Sessions are sorted by urgency (most attention-needed first):
 5. **Idle/Abandoned** (sort order 5)
 
 Within each status group, sessions are grouped alphabetically by GitHub repo slug (or project name for local repos), displayed as uppercase section headers.
+
+---
+
+## Platform Behavior
+
+Clawdboard must respect standard macOS behaviors. Never hardcode values that the system provides dynamically.
+
+### Appearance Adaptation
+
+- **Menu bar tinting**: The menu bar appearance is driven by the desktop wallpaper, not system dark/light mode. All menu bar elements must visually match the system's menu bar tinting — colored status dots keep their explicit colors, but neutral elements (e.g. the usage ring) must adapt.
+- **Semantic colors**: Use semantic colors throughout the panel UI so they adapt to light/dark mode automatically.
+- **Dynamic appearance**: The app must react to appearance changes (wallpaper changes, dark mode toggle, space switches) and redraw affected elements. Never assume appearance is static for the lifetime of the app.

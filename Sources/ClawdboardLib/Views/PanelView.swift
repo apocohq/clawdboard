@@ -129,7 +129,9 @@ public struct PanelView: View {
             .controlSize(.small)
 
             if let limits = appState.usageLimits {
-                Button { appState.refreshUsageLimits() } label: {
+                Button {
+                    appState.refreshUsageLimits()
+                } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption)
                         .foregroundStyle(.secondary)

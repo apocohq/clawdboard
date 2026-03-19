@@ -277,6 +277,7 @@ struct MenuBarLabel: View {
     let appState: AppState
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
+    @State private var menuBarAppearanceObserver = MenuBarAppearanceObserver()
 
     /// Usage fill percentage (0–100) from the 5-hour usage limit, nil if unavailable.
     private var usagePct: CGFloat? {
@@ -294,6 +295,8 @@ struct MenuBarLabel: View {
         let approval = appState.needsApprovalCount
         let waiting = appState.waitingCount
         let working = appState.workingCount
+        // Read to establish SwiftUI dependency so we redraw on appearance changes
+        let _ = menuBarAppearanceObserver.isDark
 
         if approval == 0 && waiting == 0 && working == 0 {
             if showRing, let pct = usagePct,
@@ -303,7 +306,7 @@ struct MenuBarLabel: View {
             } else {
                 Image(systemName: "apple.terminal")
             }
-        } else if let image = Self.renderStatusImage(
+        } else if let image = Self.renderDotsImage(
             approval: approval, waiting: waiting, working: working,
             useRedYellowMode: useRedYellowMode,
             usagePct: showRing ? usagePct : nil
@@ -381,7 +384,9 @@ struct MenuBarLabel: View {
 
     /// Render one colored dot per active session, ordered by urgency.
     /// Caps at maxDots to keep menu bar compact.
-    private static func renderStatusImage(
+    /// The usage ring is drawn using the resolved menu bar foreground color
+    /// so it adapts to wallpaper-driven tinting while dots keep their colors.
+    private static func renderDotsImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,
         usagePct: CGFloat? = nil
@@ -424,12 +429,16 @@ struct MenuBarLabel: View {
             NSBezierPath(ovalIn: dotRect).fill()
         }
 
-        // Optional usage ring
+        // Draw the usage ring using the menu bar's resolved foreground color,
+        // derived from the NSStatusBarWindow's effectiveAppearance which
+        // accounts for wallpaper-driven tinting — not just system dark mode.
         if let pct = usagePct {
+            let ringColor = statusBarForegroundColor()
             let ringX = dotsWidth + ringSpacing + ringDiameter / 2
             drawRing(
                 center: NSPoint(x: ringX, y: menuBarHeight / 2),
-                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct
+                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct,
+                color: ringColor
             )
         }
 
@@ -439,5 +448,72 @@ struct MenuBarLabel: View {
         image.addRepresentation(rep)
         image.isTemplate = false
         return image
+    }
+
+    /// Resolve the correct foreground color for menu bar items.
+    /// Finds the NSStatusBarWindow (created by macOS for each status item) and reads
+    /// its effectiveAppearance, which is set based on the wallpaper behind the menu bar
+    /// — not just system-wide dark/light mode.
+    private static func statusBarForegroundColor() -> NSColor {
+        for window in NSApp.windows
+        where String(describing: type(of: window)).contains("StatusBar") {
+            let appearance = window.effectiveAppearance
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark ? .white : .black
+        }
+        // Fallback: use app-level appearance
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark ? .white : .black
+    }
+}
+
+/// Observes the NSStatusBarWindow's effectiveAppearance via KVO so SwiftUI
+/// redraws the menu bar label when the wallpaper-driven tinting changes.
+@Observable
+final class MenuBarAppearanceObserver: NSObject {
+    var isDark: Bool = false
+    private var kvoToken: NSKeyValueObservation?
+    private weak var observedWindow: NSWindow?
+
+    override init() {
+        super.init()
+        // Defer so the status bar window exists
+        DispatchQueue.main.async { [weak self] in
+            self?.attachObserver()
+        }
+    }
+
+    private func attachObserver() {
+        guard
+            let window = NSApp.windows.first(where: {
+                String(describing: type(of: $0)).contains("StatusBar")
+            })
+        else {
+            NSLog("[MenuBarAppearance] No StatusBarWindow found, will retry")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.attachObserver()
+            }
+            return
+        }
+
+        observedWindow = window
+        let currentlyDark =
+            window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        isDark = currentlyDark
+        NSLog("[MenuBarAppearance] Attached to StatusBarWindow, isDark=%d", isDark ? 1 : 0)
+
+        kvoToken = window.observe(\.effectiveAppearance, options: [.new]) {
+            [weak self] window, _ in
+            let newDark =
+                window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            NSLog("[MenuBarAppearance] Appearance changed, isDark=%d", newDark ? 1 : 0)
+            DispatchQueue.main.async {
+                self?.isDark = newDark
+            }
+        }
+    }
+
+    deinit {
+        kvoToken?.invalidate()
     }
 }
