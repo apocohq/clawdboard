@@ -1,32 +1,26 @@
 import Foundation
 
-/// Polls git info for active sessions on a background timer.
+/// Reactive git info collector for active sessions.
 ///
-/// Collects two kinds of data:
-/// - **Diff stats**: `git diff --shortstat` every 5s (3s per-session debounce)
-/// - **PR lookup**: `gh pr list` every 60s for sessions missing a PR URL
+/// - **Diff stats**: Triggered by `requestRefresh()` (called when sessions change)
+///   with a 3s per-session debounce. Results kept in memory — no state file writes.
+/// - **PR lookup**: 60s timer polling `gh pr list` for sessions missing a PR URL.
+///   PR results are written to state files since they're expensive to re-fetch.
 ///
-/// All git/gh commands run off the main thread. Results are delivered
-/// on the main queue via callbacks.
-///
-/// Performance: `git diff --shortstat` completes in ~3ms on modern hardware,
-/// and default branch detection (`symbolic-ref` / `rev-parse`) adds ~2-4ms.
-/// The default branch is cached per-cwd to avoid repeated lookups.
+/// All git/gh commands run off the main thread. Results delivered on the main queue.
 public class GitInfoPoller {
-    /// How often the timer fires (diff stats cadence).
-    private static let tickInterval: TimeInterval = 5
-    /// PR lookup runs every Nth tick (60s / 5s = 12).
-    private static let prTickModulo = 12
-    /// Minimum seconds between diff stats updates for the same session.
+    /// Minimum seconds between diff stats fetches for the same session.
     private static let diffStatsDebounce: TimeInterval = 3
+    /// PR lookup interval.
+    private static let prPollInterval: TimeInterval = 60
 
-    private var timer: Timer?
-    private var tickCount = 0
+    private var prTimer: Timer?
 
     // MARK: - Callbacks
 
-    private let onDiffStats: (String, DiffStats) -> Void
-    private let onPRInfo: (String, PRInfo) -> Void
+    /// Called on main queue when diff stats or PR info change.
+    /// AppState should call rebuildSessions() to merge the new data.
+    private let onChange: () -> Void
 
     // MARK: - Types
 
@@ -35,21 +29,27 @@ public class GitInfoPoller {
         public let deletions: Int
     }
 
-    public struct PRInfo {
+    public struct PRInfo: Equatable {
         public let number: Int
         public let url: String
         public let title: String
     }
 
+    // MARK: - In-memory caches (read by AppState during rebuildSessions)
+
+    /// Cached diff stats keyed by session ID.
+    public private(set) var diffStatsCache: [String: DiffStats] = [:]
+
+    /// Cached PR info keyed by session ID.
+    public private(set) var prInfoCache: [String: PRInfo] = [:]
+
     // MARK: - Session tracking
 
-    /// Sessions eligible for diff stats polling.
     public struct DiffStatsTarget {
         public let sessionId: String
         public let cwd: String
     }
 
-    /// Sessions eligible for PR lookup.
     public struct PRTarget {
         public let sessionId: String
         public let repo: String
@@ -59,46 +59,36 @@ public class GitInfoPoller {
     private var diffStatsTargets: [DiffStatsTarget] = []
     private var prTargets: [PRTarget] = []
 
-    /// Tracks when diff stats were last updated per session (for debounce).
-    private var lastDiffStatsUpdate: [String: Date] = []
-
-    /// Tracks last reported diff stats per session to avoid redundant callbacks.
-    private var lastDiffStatsValue: [String: DiffStats] = [:]
+    /// Tracks when diff stats were last fetched per session (for debounce).
+    private var lastDiffStatsFetch: [String: Date] = [:]
 
     /// Cached default branch per cwd (stable for the lifetime of a session).
     private var defaultBranchCache: [String: String] = [:]
 
-    /// Once `gh` is known to be missing, skip PR polling for this run.
+    /// Once `gh` is known to be missing, skip PR polling entirely.
     private var ghAvailable: Bool?
 
     // MARK: - Init / lifecycle
 
-    public init(
-        onDiffStats: @escaping (String, DiffStats) -> Void,
-        onPRInfo: @escaping (String, PRInfo) -> Void
-    ) {
-        self.onDiffStats = onDiffStats
-        self.onPRInfo = onPRInfo
+    public init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
     }
 
     public func start() {
-        // Run once immediately for diff stats
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.pollDiffStats()
-        }
-        timer = Timer.scheduledTimer(
-            withTimeInterval: Self.tickInterval, repeats: true
+        prTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.prPollInterval, repeats: true
         ) { [weak self] _ in
-            self?.tick()
+            self?.pollPRs()
         }
     }
 
     public func stop() {
-        timer?.invalidate()
-        timer = nil
+        prTimer?.invalidate()
+        prTimer = nil
     }
 
-    /// Update the session lists to poll.
+    /// Update the session lists and trigger a diff stats refresh.
+    /// Called by AppState from rebuildSessions().
     public func updateTargets(
         diffStats: [DiffStatsTarget],
         pr: [PRTarget]
@@ -108,36 +98,36 @@ public class GitInfoPoller {
 
         // Clean up caches for sessions that are no longer active
         let activeSessionIds = Set(diffStats.map(\.sessionId))
-        lastDiffStatsUpdate = lastDiffStatsUpdate.filter { activeSessionIds.contains($0.key) }
-        lastDiffStatsValue = lastDiffStatsValue.filter { activeSessionIds.contains($0.key) }
+        lastDiffStatsFetch = lastDiffStatsFetch.filter { activeSessionIds.contains($0.key) }
+        diffStatsCache = diffStatsCache.filter { activeSessionIds.contains($0.key) }
+        prInfoCache = prInfoCache.filter { activeSessionIds.contains($0.key) }
 
         let activeCwds = Set(diffStats.map(\.cwd))
         defaultBranchCache = defaultBranchCache.filter { activeCwds.contains($0.key) }
+
+        // Reactively fetch diff stats for sessions that need it
+        requestRefresh()
     }
 
-    // MARK: - Tick
-
-    private func tick() {
-        tickCount += 1
+    /// Trigger a debounced diff stats refresh for all active sessions.
+    public func requestRefresh() {
+        let targets = diffStatsTargets
+        guard !targets.isEmpty else { return }
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            self.pollDiffStats()
-
-            if self.tickCount % Self.prTickModulo == 0 {
-                self.pollPRs()
-            }
+            self?.fetchDiffStatsForTargets(targets)
         }
     }
 
     // MARK: - Diff stats
 
-    private func pollDiffStats() {
-        let targets = diffStatsTargets
+    private func fetchDiffStatsForTargets(_ targets: [DiffStatsTarget]) {
         let now = Date()
+        var anyChanged = false
+
         for target in targets {
-            // Debounce: skip if updated recently
-            if let last = lastDiffStatsUpdate[target.sessionId],
+            // Debounce: skip if fetched recently
+            if let last = lastDiffStatsFetch[target.sessionId],
                 now.timeIntervalSince(last) < Self.diffStatsDebounce
             {
                 continue
@@ -145,14 +135,18 @@ public class GitInfoPoller {
 
             guard let stats = fetchDiffStats(cwd: target.cwd) else { continue }
 
-            lastDiffStatsUpdate[target.sessionId] = now
+            lastDiffStatsFetch[target.sessionId] = now
 
-            // Only fire callback if the value actually changed
-            if lastDiffStatsValue[target.sessionId] == stats { continue }
-            lastDiffStatsValue[target.sessionId] = stats
+            // Only notify if the value actually changed
+            if diffStatsCache[target.sessionId] != stats {
+                diffStatsCache[target.sessionId] = stats
+                anyChanged = true
+            }
+        }
 
+        if anyChanged {
             DispatchQueue.main.async { [weak self] in
-                self?.onDiffStats(target.sessionId, stats)
+                self?.onChange()
             }
         }
     }
@@ -195,7 +189,6 @@ public class GitInfoPoller {
 
     /// Detect the default branch (main/master) for the repo.
     private static func resolveDefaultBranch(cwd: String) -> String? {
-        // Try symbolic-ref first
         let symRef = Process()
         symRef.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         symRef.arguments = ["symbolic-ref", "refs/remotes/origin/HEAD"]
@@ -218,7 +211,6 @@ public class GitInfoPoller {
             }
         } catch {}
 
-        // Fallback: try main then master
         for branch in ["main", "master"] {
             let verify = Process()
             verify.executableURL = URL(fileURLWithPath: "/usr/bin/git")
@@ -264,13 +256,12 @@ public class GitInfoPoller {
         return DiffStats(additions: additions, deletions: deletions)
     }
 
-    // MARK: - PR lookup
+    // MARK: - PR lookup (timer-based, writes to state files)
 
     private func pollPRs() {
         let targets = prTargets
         guard !targets.isEmpty else { return }
 
-        // Cache gh availability per app session
         if ghAvailable == nil {
             ghAvailable = Self.isGHAvailable()
         }
@@ -279,18 +270,35 @@ public class GitInfoPoller {
             return
         }
 
-        for target in targets {
-            fetchPR(target: target)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            var anyChanged = false
+
+            for target in targets {
+                if let info = Self.fetchPR(repo: target.repo, branch: target.branch) {
+                    debugLog(
+                        "[GitInfoPoller] Found PR #\(info.number) for \(target.repo):\(target.branch)"
+                    )
+                    self.prInfoCache[target.sessionId] = info
+                    anyChanged = true
+                }
+            }
+
+            if anyChanged {
+                DispatchQueue.main.async { [weak self] in
+                    self?.onChange()
+                }
+            }
         }
     }
 
-    private func fetchPR(target: PRTarget) {
+    private static func fetchPR(repo: String, branch: String) -> PRInfo? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [
             "gh", "pr", "list",
-            "--repo", target.repo,
-            "--head", target.branch,
+            "--repo", repo,
+            "--head", branch,
             "--json", "number,url,title",
             "--limit", "1",
         ]
@@ -303,12 +311,12 @@ public class GitInfoPoller {
             process.waitUntilExit()
         } catch {
             debugLog("[GitInfoPoller] Failed to run gh: \(error)")
-            return
+            return nil
         }
 
-        guard process.terminationStatus == 0 else { return }
+        guard process.terminationStatus == 0 else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard !data.isEmpty else { return }
+        guard !data.isEmpty else { return nil }
 
         struct GHPREntry: Decodable {
             let number: Int
@@ -318,13 +326,9 @@ public class GitInfoPoller {
 
         guard let entries = try? JSONDecoder().decode([GHPREntry].self, from: data),
             let first = entries.first
-        else { return }
+        else { return nil }
 
-        let info = PRInfo(number: first.number, url: first.url, title: first.title)
-        debugLog("[GitInfoPoller] Found PR #\(info.number) for \(target.repo):\(target.branch)")
-        DispatchQueue.main.async { [weak self] in
-            self?.onPRInfo(target.sessionId, info)
-        }
+        return PRInfo(number: first.number, url: first.url, title: first.title)
     }
 
     private static func isGHAvailable() -> Bool {

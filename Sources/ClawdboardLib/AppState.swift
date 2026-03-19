@@ -184,46 +184,40 @@ public class AppState {
 
     private func startGitInfoPoller() {
         guard gitInfoPoller == nil else { return }
-        gitInfoPoller = GitInfoPoller(
-            onDiffStats: { [weak self] sessionId, stats in
-                self?.applyDiffStats(sessionId: sessionId, stats: stats)
-            },
-            onPRInfo: { [weak self] sessionId, prInfo in
-                self?.applyPRInfo(sessionId: sessionId, prInfo: prInfo)
-            }
-        )
+        gitInfoPoller = GitInfoPoller { [weak self] in
+            // Poller discovered new data — merge it into sessions
+            self?.mergeGitInfo()
+        }
         gitInfoPoller?.start()
     }
 
-    /// Write diff stats to the session state file.
-    private func applyDiffStats(sessionId: String, stats: GitInfoPoller.DiffStats) {
-        let file = sessionsDir.appendingPathComponent("\(sessionId).json")
-        guard let data = try? Data(contentsOf: file),
-            var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
-
-        json["additions"] = stats.additions
-        json["deletions"] = stats.deletions
-
-        if let newData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
-            try? newData.write(to: file, options: .atomic)
+    /// Merge cached diff stats and PR info from the poller into session objects.
+    private func mergeGitInfo() {
+        guard let poller = gitInfoPoller else { return }
+        var changed = false
+        for i in sessions.indices {
+            let id = sessions[i].sessionId
+            if let stats = poller.diffStatsCache[id] {
+                let newAdd = stats.additions
+                let newDel = stats.deletions
+                if sessions[i].additions != newAdd || sessions[i].deletions != newDel {
+                    sessions[i].additions = newAdd
+                    sessions[i].deletions = newDel
+                    changed = true
+                }
+            }
+            if let pr = poller.prInfoCache[id] {
+                if sessions[i].prUrl != pr.url {
+                    sessions[i].prUrl = pr.url
+                    sessions[i].prNumber = pr.number
+                    sessions[i].prTitle = pr.title
+                    changed = true
+                }
+            }
         }
-    }
-
-    /// Write PR info to the session state file.
-    private func applyPRInfo(sessionId: String, prInfo: GitInfoPoller.PRInfo) {
-        let file = sessionsDir.appendingPathComponent("\(sessionId).json")
-        guard let data = try? Data(contentsOf: file),
-            var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
-
-        json["pr_url"] = prInfo.url
-        json["pr_number"] = prInfo.number
-        json["pr_title"] = prInfo.title
-
-        if let newData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
-            try? newData.write(to: file, options: .atomic)
-        }
+        // No need to call rebuildSessions — we mutated the @Observable array directly,
+        // so SwiftUI will pick up the changes.
+        _ = changed
     }
 
     /// Update the git info poller with current session targets.

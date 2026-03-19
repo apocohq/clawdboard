@@ -374,21 +374,21 @@ Inline colored diff stats (used in both metadata line and expanded details).
 ### GitInfoPoller
 **File**: `Sources/ClawdboardLib/GitHubPRPoller.swift`
 
-Background poller that collects git diff stats and discovers open PRs for active sessions. All git/gh commands run off the main thread.
+Event-driven git info collector. Diff stats are reactive (triggered by session changes); PR lookup uses a 60s timer. All git/gh commands run off the main thread. Results kept in memory — no state file writes.
 
 | Property | Value |
 |----------|-------|
-| Tick interval | 5 seconds |
-| Diff stats debounce | 3 seconds per session (skips if updated recently) |
-| PR poll cadence | Every 12th tick (60 seconds) |
+| Diff stats trigger | Reactive — fires on every `rebuildSessions()` (i.e. every hook event) |
+| Diff stats debounce | 3 seconds per session (skips if fetched recently) |
+| PR poll interval | 60 seconds (timer) |
 | Diff stats command | `git diff --shortstat origin/<default>..HEAD` |
 | PR command | `gh pr list --repo <repo> --head <branch> --json number,url,title --limit 1` |
 | Diff targets | All local non-abandoned sessions with a `cwd` |
 | PR targets | Local sessions with `githubRepo` + `gitBranch` but no `prUrl` |
+| Storage | In-memory caches (`diffStatsCache`, `prInfoCache`) — merged into sessions by AppState |
 | Graceful degradation | Silently skips PR lookup if `gh` CLI not available; diff stats always work |
-| Default branch detection | `git symbolic-ref refs/remotes/origin/HEAD` → fallback to main → master |
 | Default branch cache | Cached per-cwd for the session lifetime (avoids repeated lookups) |
-| Value dedup | Diff stats callback only fires when the value actually changes |
+| Value dedup | Callback only fires when values actually change |
 | Performance | `git diff --shortstat` ~3ms, default branch resolve ~4ms (first call only) |
 
 ---
