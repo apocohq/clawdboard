@@ -52,7 +52,7 @@ To run the app with auto-restart on every code change:
 
 ```bash
 brew install watchexec  # one-time setup
-watchexec --restart --exts swift,py --watch Sources/ -- swift run Clawdboard
+watchexec --restart --exts swift,py --watch Sources/ -- bash -c 'swift build && .build/debug/Clawdboard'
 ```
 
 See [CLAUDE.md](CLAUDE.md) for architecture details and conventions.
