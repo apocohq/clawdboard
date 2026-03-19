@@ -170,11 +170,6 @@ def main() -> None:
     model: str = hook_input.get("model", "")
     claude_pid = os.getppid()
 
-    # Bail out if this is a title-generation subprocess (avoid ghost sessions)
-    if os.environ.get("_CLAWDBOARD_TITLE_GEN"):
-        print('{"suppressOutput": true}')
-        return
-
     if not session_id:
         print('{"suppressOutput": true}')
         return
@@ -337,7 +332,7 @@ claude_prompt = (
 
 try:
     result = subprocess.run(
-        ["claude", "-p", claude_prompt, "--output-format", "text"],
+        ["claude", "-p", "--no-session-persistence", claude_prompt, "--output-format", "text"],
         capture_output=True, text=True, timeout=30,
     )
     title = result.stdout.strip()[:80] if result.returncode == 0 else ""
@@ -362,8 +357,6 @@ def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
     env = os.environ.copy()
     env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
     env["_CLAWDBOARD_PROMPTS"] = json.dumps(user_prompts)
-    env["_CLAWDBOARD_TITLE_GEN"] = "1"
-
     subprocess.Popen(
         [sys.executable, "-c", _TITLE_SCRIPT],
         stdin=subprocess.DEVNULL,
