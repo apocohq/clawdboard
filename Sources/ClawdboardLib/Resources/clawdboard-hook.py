@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,24 @@ SESSIONS_DIR = Path.home() / ".clawdboard" / "sessions"
 LOG_FILE = Path.home() / ".clawdboard" / "hook-debug.log"
 MODEL_CACHE_FILE = Path.home() / ".clawdboard" / "model-context-windows.json"
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+
+TITLE_PLACEHOLDERS = [
+    "Thinking really hard...",
+    "Consulting the oracle...",
+    "Summoning creativity...",
+    "Herding electrons...",
+    "Asking the magic 8-ball...",
+    "Warming up the hamsters...",
+    "Reticulating splines...",
+    "Brewing a title...",
+    "Hold my tokens...",
+    "Crunching vibes...",
+    "Tickling the transformer...",
+    "Polishing pixels...",
+    "Wrangling words...",
+    "Spinning up the flux capacitor...",
+    "Petting the neural cat...",
+]
 
 
 def get_context_window(model_id: str) -> int:
@@ -150,6 +169,11 @@ def main() -> None:
     prompt: str = hook_input.get("prompt", "")
     model: str = hook_input.get("model", "")
     claude_pid = os.getppid()
+
+    # Bail out if this is a title-generation subprocess (avoid ghost sessions)
+    if os.environ.get("_CLAWDBOARD_TITLE_GEN"):
+        print('{"suppressOutput": true}')
+        return
 
     if not session_id:
         print('{"suppressOutput": true}')
@@ -338,6 +362,7 @@ def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
     env = os.environ.copy()
     env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
     env["_CLAWDBOARD_PROMPTS"] = json.dumps(user_prompts)
+    env["_CLAWDBOARD_TITLE_GEN"] = "1"
 
     subprocess.Popen(
         [sys.executable, "-c", _TITLE_SCRIPT],
@@ -466,17 +491,18 @@ def handle_user_prompt_submit(
     count = state.get("user_message_count", 0) + 1
     state["user_message_count"] = count
     prompts = state.get("user_prompts", [])
-    if len(prompts) < 3 and prompt:
+    if len(prompts) < 2 and prompt:
         first_line = prompt.strip().split("\n")[0].strip()[:200]
         if first_line:
             prompts.append(first_line)
         state["user_prompts"] = prompts
 
-    # Generate title on message 1 (quick) and message 3 (refined)
-    # Message 3 always triggers even if message 1 generation is still running
-    should_generate = count in (1, 3) and prompts
-    if should_generate and (count == 3 or not state.get("title_generating")):
+    # Generate title on message 1 (quick) and message 2 (refined)
+    # Message 2 always triggers even if message 1 generation is still running
+    should_generate = count in (1, 2) and prompts
+    if should_generate and (count == 2 or not state.get("title_generating")):
         state["title_generating"] = True
+        state["title"] = random.choice(TITLE_PLACEHOLDERS)
         merge_transcript_data(state, data)
         write_state(state_file, state)
         generate_title_async(state_file, prompts)
