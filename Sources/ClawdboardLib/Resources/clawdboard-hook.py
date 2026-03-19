@@ -154,6 +154,98 @@ def get_github_repo(cwd: str) -> str | None:
         return None
 
 
+def get_default_branch(cwd: str) -> str:
+    """Return the default branch name for the repo at cwd."""
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode == 0:
+            # e.g. "refs/remotes/origin/main" → "main"
+            return result.stdout.strip().rsplit("/", 1)[-1]
+    except Exception:
+        pass
+    # Fallback: try main, then master
+    for branch in ("main", "master"):
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", f"origin/{branch}"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                cwd=cwd,
+            )
+            if result.returncode == 0:
+                return branch
+        except Exception:
+            pass
+    return "main"
+
+
+def get_git_diff_stats(cwd: str) -> tuple[int, int] | None:
+    """Return (additions, deletions) for the current branch vs default branch.
+
+    Runs ``git diff --shortstat <default>..HEAD`` which is fast (~10ms local).
+    Returns None if not in a git repo or on the default branch itself.
+    """
+    if not cwd:
+        return None
+    try:
+        default_branch = get_default_branch(cwd)
+        result = subprocess.run(
+            ["git", "diff", "--shortstat", f"origin/{default_branch}..HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return None
+        output = result.stdout.strip()
+        if not output:
+            return (0, 0)
+        additions = 0
+        deletions = 0
+        import re
+
+        add_match = re.search(r"(\d+) insertion", output)
+        del_match = re.search(r"(\d+) deletion", output)
+        if add_match:
+            additions = int(add_match.group(1))
+        if del_match:
+            deletions = int(del_match.group(1))
+        return (additions, deletions)
+    except Exception:
+        return None
+
+
+def scan_transcript_for_pr_url(transcript_path: str) -> str | None:
+    """Scan transcript for PR URLs from gh pr create output."""
+    if not transcript_path or not os.path.isfile(transcript_path):
+        return None
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            read_size = min(size, 200 * 1024)
+            f.seek(size - read_size)
+            content = f.read().decode("utf-8", errors="replace")
+
+        import re
+
+        # Match GitHub PR URLs in tool output
+        matches = re.findall(
+            r"https://github\.com/[^/]+/[^/]+/pull/\d+", content
+        )
+        return matches[-1] if matches else None
+    except Exception:
+        return None
+
+
 def main() -> None:
     notification_subtype = sys.argv[1] if len(sys.argv) > 1 else ""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -301,6 +393,9 @@ TRANSCRIPT_KEYS = (
     "git_branch",
     "slug",
     "context_pct",
+    "additions",
+    "deletions",
+    "pr_url",
 )
 
 
@@ -450,6 +545,18 @@ def handle_post_tool_use(
 
     # Then read transcript data and write again with full info
     data = read_transcript_data(transcript_path, state_file)
+
+    # Collect diff stats (fast local git operation)
+    diff = get_git_diff_stats(cwd)
+    if diff is not None:
+        data["additions"] = diff[0]
+        data["deletions"] = diff[1]
+
+    # Scan transcript for PR URLs
+    pr_url = scan_transcript_for_pr_url(transcript_path)
+    if pr_url:
+        data["pr_url"] = pr_url
+
     merge_transcript_data(state, data)
     write_state(state_file, state)
 
@@ -459,6 +566,19 @@ def handle_stop(state_file: Path, transcript_path: str, now: str) -> None:
     if state is None:
         return
     data = read_transcript_data(transcript_path, state_file)
+
+    # Collect diff stats on stop (captures final state of the turn)
+    cwd = state.get("cwd", "")
+    diff = get_git_diff_stats(cwd)
+    if diff is not None:
+        data["additions"] = diff[0]
+        data["deletions"] = diff[1]
+
+    # Scan transcript for PR URLs
+    pr_url = scan_transcript_for_pr_url(transcript_path)
+    if pr_url:
+        data["pr_url"] = pr_url
+
     state["status"] = "pending_waiting"
     state["updated_at"] = now
     merge_transcript_data(state, data)

@@ -29,6 +29,7 @@ public class AppState {
     private var stateWatcher: SessionStateWatcher?
     private var remoteWatcher: RemoteSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
+    private var prPoller: GitHubPRPoller?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -69,6 +70,7 @@ public class AppState {
 
         startRemoteWatcher()
         startUsageLimitsWatcher()
+        startPRPoller()
     }
 
     public func stop() {
@@ -78,6 +80,8 @@ public class AppState {
         remoteWatcher = nil
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
+        prPoller?.stop()
+        prPoller = nil
     }
 
     // MARK: - Remote Host Management
@@ -176,6 +180,47 @@ public class AppState {
         usageLimitsWatcher?.refresh()
     }
 
+    // MARK: - PR Poller
+
+    private func startPRPoller() {
+        guard prPoller == nil else { return }
+        prPoller = GitHubPRPoller { [weak self] sessionId, prInfo in
+            self?.applyPRInfo(sessionId: sessionId, prInfo: prInfo)
+        }
+        prPoller?.start()
+    }
+
+    /// Apply PR info discovered by the poller to the matching session state file.
+    private func applyPRInfo(sessionId: String, prInfo: GitHubPRPoller.PRInfo) {
+        // Update local state file so the data persists across rebuilds
+        let file = sessionsDir.appendingPathComponent("\(sessionId).json")
+        guard let data = try? Data(contentsOf: file),
+            var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        json["pr_url"] = prInfo.url
+        json["pr_number"] = prInfo.number
+        json["pr_title"] = prInfo.title
+
+        if let newData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
+            try? newData.write(to: file, options: .atomic)
+        }
+    }
+
+    /// Update the PR poller with sessions that need PR lookup.
+    private func refreshPRPollerSessions() {
+        let pending = sessions.compactMap {
+            session -> (id: String, repo: String, branch: String)? in
+            guard let repo = session.githubRepo,
+                let branch = session.gitBranch,
+                session.prUrl == nil,
+                session.remoteHost == nil
+            else { return nil }
+            return (id: session.sessionId, repo: repo, branch: branch)
+        }
+        prPoller?.updateSessions(pending)
+    }
+
     // MARK: - IDE Lock Files
 
     /// Scan ~/.claude/ide/*.lock for IDE window info.
@@ -265,6 +310,7 @@ public class AppState {
         previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
 
         sessions = all
+        refreshPRPollerSessions()
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()

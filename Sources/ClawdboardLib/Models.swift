@@ -240,6 +240,21 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// The first user prompt, used as a fallback label
     public var firstPrompt: String?
 
+    /// Lines added relative to default branch (from git diff --shortstat)
+    public var additions: Int?
+
+    /// Lines deleted relative to default branch (from git diff --shortstat)
+    public var deletions: Int?
+
+    /// Full URL to an open pull request for this branch
+    public var prUrl: String?
+
+    /// PR number (e.g. 42)
+    public var prNumber: Int?
+
+    /// PR title text
+    public var prTitle: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -259,6 +274,11 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case iterm2SessionId = "iterm2_session_id"
         case title
         case firstPrompt = "first_prompt"
+        case additions
+        case deletions
+        case prUrl = "pr_url"
+        case prNumber = "pr_number"
+        case prTitle = "pr_title"
     }
 
     public init(
@@ -279,7 +299,12 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         githubRepo: String? = nil,
         iterm2SessionId: String? = nil,
         title: String? = nil,
-        firstPrompt: String? = nil
+        firstPrompt: String? = nil,
+        additions: Int? = nil,
+        deletions: Int? = nil,
+        prUrl: String? = nil,
+        prNumber: Int? = nil,
+        prTitle: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -299,6 +324,11 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.iterm2SessionId = iterm2SessionId
         self.title = title
         self.firstPrompt = firstPrompt
+        self.additions = additions
+        self.deletions = deletions
+        self.prUrl = prUrl
+        self.prNumber = prNumber
+        self.prTitle = prTitle
     }
 
     /// Display title: AI-generated title, or a fun placeholder while generating
@@ -358,6 +388,29 @@ public struct AgentSession: Identifiable, Codable, Equatable {
             return "\(hours)h \(minutes)m"
         }
         return "\(minutes)m"
+    }
+
+    /// Formatted diff stats like "+120 −47", or nil if no data
+    public var formattedDiffStats: String? {
+        guard additions != nil || deletions != nil else { return nil }
+        let add = additions ?? 0
+        let del = deletions ?? 0
+        if add == 0 && del == 0 { return nil }
+        var parts: [String] = []
+        if add > 0 { parts.append("+\(add)") }
+        if del > 0 { parts.append("−\(del)") }
+        return parts.joined(separator: " ")
+    }
+
+    /// URL to open for the PR/branch button: existing PR or GitHub compare page
+    public var prOrCompareUrl: String? {
+        if let prUrl = prUrl { return prUrl }
+        if let repo = githubRepo, let branch = gitBranch {
+            let encoded = branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+                ?? branch
+            return "https://github.com/\(repo)/compare/\(encoded)?expand=1"
+        }
+        return nil
     }
 
     /// Human-readable idle duration since a given date
