@@ -349,7 +349,6 @@ Clawdboard must respect standard macOS behaviors. Never hardcode values that the
 
 ### Appearance Adaptation
 
-- **Menu bar tinting**: The menu bar appearance is driven by the wallpaper behind it, not system dark/light mode. Any non-template rendering in the menu bar must observe the `NSStatusBarWindow.effectiveAppearance` and redraw when it changes.
-- **Template images**: Use `isTemplate = true` for menu bar elements that should follow system tinting (e.g. the usage ring). Only use `isTemplate = false` for elements that must preserve explicit colors (e.g. status dots).
-- **Semantic colors**: Use SwiftUI semantic colors (`.primary`, `.secondary`, etc.) throughout the panel UI — these adapt to light/dark mode automatically.
-- **System notifications**: Observe and react to system appearance changes (wallpaper, dark mode, space switches). Do not assume appearance is static for the lifetime of the app.
+- **Menu bar tinting**: The menu bar appearance is driven by the desktop wallpaper, not system dark/light mode. All menu bar elements must visually match the system's menu bar tinting — colored status dots keep their explicit colors, but neutral elements (e.g. the usage ring) must adapt.
+- **Semantic colors**: Use semantic colors throughout the panel UI so they adapt to light/dark mode automatically.
+- **Dynamic appearance**: The app must react to appearance changes (wallpaper changes, dark mode toggle, space switches) and redraw affected elements. Never assume appearance is static for the lifetime of the app.
