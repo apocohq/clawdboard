@@ -11,6 +11,7 @@ public struct SettingsView: View {
     @State private var isInstallingITerm2 = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
     @State private var alertSoundName: String? = AlertSoundManager.shared.soundFileName
+    @State private var alertVolume: Float = AlertSoundManager.shared.volume
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
@@ -99,6 +100,27 @@ public struct SettingsView: View {
 
                     Button("Choose...") {
                         chooseAlertSound()
+                    }
+                }
+
+                if alertSoundName != nil {
+                    HStack(spacing: 8) {
+                        Image(systemName: "speaker.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                        Slider(
+                            value: Binding(
+                                get: { alertVolume },
+                                set: { newValue in
+                                    alertVolume = newValue
+                                    AlertSoundManager.shared.volume = newValue
+                                }
+                            ),
+                            in: 0...1
+                        )
+                        Image(systemName: "speaker.wave.3.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
                     }
                 }
             }

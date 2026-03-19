@@ -8,7 +8,21 @@ public class AlertSoundManager {
     private static let bookmarkKey = "alertSoundBookmark"
     private var player: AVAudioPlayer?
 
+    private static let volumeKey = "alertSoundVolume"
+
     private init() {}
+
+    /// Volume level from 0.0 to 1.0, persisted in UserDefaults.
+    public var volume: Float {
+        get {
+            let stored = UserDefaults.standard.object(forKey: Self.volumeKey)
+            return (stored as? Float) ?? 1.0
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.volumeKey)
+            player?.volume = newValue
+        }
+    }
 
     /// The resolved URL from the stored security-scoped bookmark, or nil if not set.
     public var soundFileURL: URL? {
@@ -54,6 +68,7 @@ public class AlertSoundManager {
 
         do {
             player = try AVAudioPlayer(contentsOf: url)
+            player?.volume = volume
             player?.play()
         } catch {
             // Silently fail — sound is a nice-to-have
