@@ -384,9 +384,8 @@ struct MenuBarLabel: View {
 
     /// Render one colored dot per active session, ordered by urgency.
     /// Caps at maxDots to keep menu bar compact.
-    /// The usage ring is rendered as a separate template image, then composited
-    /// so macOS applies the correct wallpaper-aware tinting to it while the
-    /// colored dots remain untouched.
+    /// The usage ring is drawn using the resolved menu bar foreground color
+    /// so it adapts to wallpaper-driven tinting while dots keep their colors.
     private static func renderDotsImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,
