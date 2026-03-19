@@ -38,7 +38,7 @@ public class SessionStateWatcher {
                 queue: .main
             )
             source.setEventHandler { [weak self] in
-                NSLog("[SessionWatcher] DispatchSource fired")
+                debugLog("[SessionWatcher] DispatchSource fired")
                 self?.notifyChanges()
             }
             source.setCancelHandler { [weak self] in
@@ -74,7 +74,7 @@ public class SessionStateWatcher {
         let sessions = readAllSessions()
         let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
         if elapsed > 50 {
-            NSLog("[SessionWatcher] notifyChanges took %.0fms (%d sessions)", elapsed, sessions.count)
+            debugLog("[SessionWatcher] notifyChanges took \(Int(elapsed))ms (\(sessions.count) sessions)")
         }
         onChange(sessions)
     }

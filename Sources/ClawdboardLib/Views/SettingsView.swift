@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -10,6 +11,7 @@ public struct SettingsView: View {
     @State private var isInstallingITerm2 = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
     @State private var alertSoundName: String? = AlertSoundManager.shared.soundFileName
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
     @AppStorage("autoDeleteHours") private var autoDeleteHours: Double = 0.0
@@ -37,6 +39,21 @@ public struct SettingsView: View {
 
     private var generalTab: some View {
         Form {
+            Section("Startup") {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        do {
+                            if newValue {
+                                try SMAppService.mainApp.register()
+                            } else {
+                                try SMAppService.mainApp.unregister()
+                            }
+                        } catch {
+                            launchAtLogin = !newValue
+                        }
+                    }
+            }
+
             Section("Appearance") {
                 Toggle(isOn: $useRedYellowMode) {
                     VStack(alignment: .leading, spacing: 2) {

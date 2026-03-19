@@ -26,10 +26,18 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
-# Copy SPM resource bundle (contains hook scripts for HookManager)
+# Copy SPM resource bundle next to executable (SPM's Bundle.main.bundleURL
+# resolves to Contents/MacOS/ for executable targets)
 BUNDLE_PATH="${BUILD_DIR}/Clawdboard_ClawdboardLib.bundle"
 if [ -d "$BUNDLE_PATH" ]; then
-    cp -R "$BUNDLE_PATH" "${RESOURCES_DIR}/"
+    cp -R "$BUNDLE_PATH" "${MACOS_DIR}/"
+fi
+
+# Copy app icon
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ICON_PATH="${SCRIPT_DIR}/../assets/AppIcon.icns"
+if [ -f "$ICON_PATH" ]; then
+    cp "$ICON_PATH" "${RESOURCES_DIR}/AppIcon.icns"
 fi
 
 # Write Info.plist
@@ -52,6 +60,8 @@ cat > "${CONTENTS_DIR}/Info.plist" << PLIST
     <string>Clawdboard</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
