@@ -18,7 +18,9 @@ public struct DetachedPanelView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 if let limits = appState.usageLimits {
-                    Button { appState.refreshUsageLimits() } label: {
+                    Button {
+                        appState.refreshUsageLimits()
+                    } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .help("Usage updated \(PanelView.updatedText(limits.updatedAt))")
