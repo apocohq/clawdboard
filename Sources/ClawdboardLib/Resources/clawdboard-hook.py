@@ -502,7 +502,8 @@ def handle_user_prompt_submit(
     should_generate = count in (1, 2) and prompts
     if should_generate and (count == 2 or not state.get("title_generating")):
         state["title_generating"] = True
-        state["title"] = random.choice(TITLE_PLACEHOLDERS)
+        if not state.get("title"):
+            state["title"] = random.choice(TITLE_PLACEHOLDERS)
         merge_transcript_data(state, data)
         write_state(state_file, state)
         generate_title_async(state_file, prompts)

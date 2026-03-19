@@ -20,13 +20,13 @@ All colors are semantic SwiftUI values — they adapt automatically to light/dar
 
 | Status | Color | Used in |
 |--------|-------|---------|
-| Working / Pending | `.green` | StatusDot, StatusPill, subagent dots, menu bar dot |
+| Working / Pending | `.blue` | StatusDot, StatusPill, subagent dots, menu bar dot |
 | Approval | `.red` | StatusDot, StatusPill, menu bar dot |
-| Waiting | `.orange` | StatusDot, StatusPill, menu bar dot |
+| Your turn (waiting) | `.green` | StatusDot, StatusPill, menu bar dot |
 | Idle (abandoned) | `.gray` at 40% opacity | StatusDot |
 | Unknown | `.gray` | StatusDot |
 
-> **Accessibility**: Red and green are indistinguishable for ~8% of men with color vision deficiency. The critical working/approval distinction does not rely on color alone — approval is the only pulsing state, and the text label in the metadata line provides a third signal. Do not add pulsing to other states without providing an alternative non-color differentiator.
+> **Accessibility**: Red and green are indistinguishable for ~8% of men with color vision deficiency. The critical approval/"your turn" distinction does not rely on color alone — approval is the only pulsing state, and the text label in the metadata line provides a third signal. Do not add pulsing to other states without providing an alternative non-color differentiator.
 
 ### Usage Gauge Colors
 
@@ -34,7 +34,7 @@ All usage indicators (context bar, usage progress bar) share the same color scal
 
 | Range | Color | Meaning |
 |-------|-------|---------|
-| 0–69% | `.blue` | Healthy |
+| 0–69% | `.secondary` | Healthy |
 | 70–89% | `.orange` | Elevated — worth noting |
 | 90%+ | `.red` | Critical — action likely needed |
 
@@ -74,7 +74,7 @@ The menu bar icon adapts based on session state:
 | Dot size | 8pt diameter |
 | Dot spacing | 4pt between dots |
 | Max dots | 8 (capped) |
-| Dot colors | `.systemRed` (approval), `.systemOrange` (waiting), `.systemGreen` (working) |
+| Dot colors | `.systemRed` (approval), `.systemGreen` (your turn), `.systemBlue` (working) |
 | Template mode | `false` when dots shown (preserves color) |
 | Usage ring | 14pt diameter, 2.5pt stroke, appended after dots if above threshold |
 
@@ -108,7 +108,7 @@ Header summary badges showing counts by status.
 | Pill-to-pill spacing | 6pt |
 | Padding | 6pt horizontal, 2pt vertical |
 | Text font | `.caption2` |
-| Labels | "N approval" (red), "N waiting" (orange), "N working" (green) |
+| Labels | "N approval" (red), "N your turn" (green), "N working" (blue) |
 
 Only shown when count > 0 for that status.
 
@@ -169,7 +169,7 @@ Single session row with expand/collapse.
 
 **Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Action buttons + context %
 
-**Title**: `.system(.body, weight: .medium)` — monospaced design when showing project path, proportional when showing first prompt. Single line, truncated.
+**Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated title when available, otherwise a fun random placeholder (stable per session ID).
 
 **Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
 
@@ -307,7 +307,7 @@ Shown when no sessions exist.
 | Use | Font Spec | Notes |
 |-----|-----------|-------|
 | App title | `.headline` | "Clawdboard" in header |
-| Session title | `.body` weight `.medium` | Monospaced design for paths, proportional for prompts |
+| Session title | `.body` weight `.medium` | AI-generated or placeholder |
 | Metadata | `.caption` | Dot-separated, `.secondary` |
 | Small labels | `.caption2` | Context %, pill text |
 | Technical data | `.caption.monospaced()` | Paths, session IDs, detail values |
@@ -334,7 +334,7 @@ Shown when no sessions exist.
 Sessions are sorted by urgency (most attention-needed first):
 
 1. **Approval** (sort order 0)
-2. **Waiting** (sort order 1)
+2. **Your turn** (sort order 1)
 3. **Pending/Working** (sort order 2–3)
 4. **Unknown** (sort order 4)
 5. **Idle/Abandoned** (sort order 5)

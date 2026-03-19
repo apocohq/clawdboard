@@ -6,9 +6,9 @@ extension AgentStatus {
     /// The color associated with this status for use in labels, dots, and pills.
     public var displayColor: Color {
         switch self {
-        case .working, .pendingWaiting: return .green
+        case .working, .pendingWaiting: return .blue
         case .needsApproval: return .red
-        case .waiting: return .orange
+        case .waiting: return .green
         case .abandoned: return .gray.opacity(0.4)
         case .unknown: return .gray
         }
@@ -83,7 +83,7 @@ public struct ContextBar: View {
     private func barColor(for pct: Double) -> Color {
         if pct >= 90 { return .red }
         if pct >= 70 { return .orange }
-        return .blue
+        return .secondary
     }
 }
 
@@ -172,7 +172,7 @@ struct UsageWindowView: View {
     private var barColor: Color {
         if window.utilization >= 90 { return .red }
         if window.utilization >= 70 { return .orange }
-        return .blue
+        return .secondary
     }
 }
 

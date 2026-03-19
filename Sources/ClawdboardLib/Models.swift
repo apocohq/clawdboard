@@ -173,7 +173,7 @@ public enum AgentStatus: String, Codable, CaseIterable {
         case .working: return "Working"
         case .pendingWaiting: return "Working"  // Show as working until debounce completes
         case .needsApproval: return "Approval"
-        case .waiting: return "Waiting"
+        case .waiting: return "Your turn"
         case .unknown: return "Unknown"
         case .abandoned: return "Idle"
         }
@@ -299,6 +299,33 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.iterm2SessionId = iterm2SessionId
         self.title = title
         self.firstPrompt = firstPrompt
+    }
+
+    /// Display title: AI-generated title, or a fun placeholder while generating
+    public var displayTitle: String {
+        if let title = title {
+            return title
+        }
+        // Stable random placeholder seeded from session ID
+        let placeholders = [
+            "Thinking really hard...",
+            "Consulting the oracle...",
+            "Summoning creativity...",
+            "Herding electrons...",
+            "Asking the magic 8-ball...",
+            "Warming up the hamsters...",
+            "Reticulating splines...",
+            "Brewing a title...",
+            "Hold my tokens...",
+            "Crunching vibes...",
+            "Tickling the transformer...",
+            "Polishing pixels...",
+            "Wrangling words...",
+            "Spinning up the flux capacitor...",
+            "Petting the neural cat...",
+        ]
+        let index = abs(sessionId.hashValue) % placeholders.count
+        return placeholders[index]
     }
 
     /// Formatted context usage like "68%"

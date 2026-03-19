@@ -82,10 +82,10 @@ public struct PanelView: View {
                     StatusPill(count: appState.needsApprovalCount, label: "approval", color: .red)
                 }
                 if appState.waitingCount > 0 {
-                    StatusPill(count: appState.waitingCount, label: "waiting", color: .orange)
+                    StatusPill(count: appState.waitingCount, label: "your turn", color: .green)
                 }
                 if appState.workingCount > 0 {
-                    StatusPill(count: appState.workingCount, label: "working", color: .green)
+                    StatusPill(count: appState.workingCount, label: "working", color: .blue)
                 }
             }
         }

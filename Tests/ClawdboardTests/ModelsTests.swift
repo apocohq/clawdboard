@@ -19,7 +19,7 @@ struct ModelsTests {
     func statusDisplayLabels() {
         #expect(AgentStatus.working.displayLabel == "Working")
         #expect(AgentStatus.pendingWaiting.displayLabel == "Working")  // Shows as working
-        #expect(AgentStatus.waiting.displayLabel == "Waiting")
+        #expect(AgentStatus.waiting.displayLabel == "Your turn")
         #expect(AgentStatus.unknown.displayLabel == "Unknown")
     }
 

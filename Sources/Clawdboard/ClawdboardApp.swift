@@ -394,8 +394,8 @@ struct MenuBarLabel: View {
         // Build dot list: most urgent first
         var dots: [NSColor] = []
         for _ in 0..<approval { dots.append(.systemRed) }
-        for _ in 0..<waiting { dots.append(.systemOrange) }
-        for _ in 0..<working { dots.append(.systemGreen) }
+        for _ in 0..<waiting { dots.append(.systemGreen) }
+        for _ in 0..<working { dots.append(.systemBlue) }
         guard !dots.isEmpty else { return nil }
 
         let maxDots = 8

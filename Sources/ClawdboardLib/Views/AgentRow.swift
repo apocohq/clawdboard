@@ -32,12 +32,8 @@ public struct AgentRow: View {
                 StatusDot(status: session.displayStatus)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(session.title ?? session.projectName)
-                        .font(
-                            session.title != nil
-                                ? .system(.body, weight: .medium)
-                                : .system(.body, design: .monospaced, weight: .medium)
-                        )
+                    Text(session.displayTitle)
+                        .font(.system(.body, weight: .medium))
                         .lineLimit(1)
 
                     HStack(spacing: 4) {
@@ -203,7 +199,7 @@ public struct AgentRow: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 60, alignment: .trailing)
                         Circle()
-                            .fill(.green)
+                            .fill(.blue)
                             .frame(width: 5, height: 5)
                         Text(subagent.agentType)
                             .font(.caption.monospaced())
