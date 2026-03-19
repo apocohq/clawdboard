@@ -3,18 +3,22 @@ import Foundation
 /// Polls git info for active sessions on a background timer.
 ///
 /// Collects two kinds of data:
-/// - **Diff stats**: `git diff --shortstat` every 15s (debounced per session)
+/// - **Diff stats**: `git diff --shortstat` every 5s (3s per-session debounce)
 /// - **PR lookup**: `gh pr list` every 60s for sessions missing a PR URL
 ///
 /// All git/gh commands run off the main thread. Results are delivered
 /// on the main queue via callbacks.
+///
+/// Performance: `git diff --shortstat` completes in ~3ms on modern hardware,
+/// and default branch detection (`symbolic-ref` / `rev-parse`) adds ~2-4ms.
+/// The default branch is cached per-cwd to avoid repeated lookups.
 public class GitInfoPoller {
     /// How often the timer fires (diff stats cadence).
-    private static let tickInterval: TimeInterval = 15
-    /// PR lookup runs every Nth tick (60s / 15s = 4).
-    private static let prTickModulo = 4
+    private static let tickInterval: TimeInterval = 5
+    /// PR lookup runs every Nth tick (60s / 5s = 12).
+    private static let prTickModulo = 12
     /// Minimum seconds between diff stats updates for the same session.
-    private static let diffStatsDebounce: TimeInterval = 10
+    private static let diffStatsDebounce: TimeInterval = 3
 
     private var timer: Timer?
     private var tickCount = 0
@@ -26,7 +30,7 @@ public class GitInfoPoller {
 
     // MARK: - Types
 
-    public struct DiffStats {
+    public struct DiffStats: Equatable {
         public let additions: Int
         public let deletions: Int
     }
@@ -57,6 +61,12 @@ public class GitInfoPoller {
 
     /// Tracks when diff stats were last updated per session (for debounce).
     private var lastDiffStatsUpdate: [String: Date] = []
+
+    /// Tracks last reported diff stats per session to avoid redundant callbacks.
+    private var lastDiffStatsValue: [String: DiffStats] = [:]
+
+    /// Cached default branch per cwd (stable for the lifetime of a session).
+    private var defaultBranchCache: [String: String] = [:]
 
     /// Once `gh` is known to be missing, skip PR polling for this run.
     private var ghAvailable: Bool?
@@ -95,6 +105,14 @@ public class GitInfoPoller {
     ) {
         diffStatsTargets = diffStats
         prTargets = pr
+
+        // Clean up caches for sessions that are no longer active
+        let activeSessionIds = Set(diffStats.map(\.sessionId))
+        lastDiffStatsUpdate = lastDiffStatsUpdate.filter { activeSessionIds.contains($0.key) }
+        lastDiffStatsValue = lastDiffStatsValue.filter { activeSessionIds.contains($0.key) }
+
+        let activeCwds = Set(diffStats.map(\.cwd))
+        defaultBranchCache = defaultBranchCache.filter { activeCwds.contains($0.key) }
     }
 
     // MARK: - Tick
@@ -125,8 +143,14 @@ public class GitInfoPoller {
                 continue
             }
 
-            guard let stats = Self.fetchDiffStats(cwd: target.cwd) else { continue }
+            guard let stats = fetchDiffStats(cwd: target.cwd) else { continue }
+
             lastDiffStatsUpdate[target.sessionId] = now
+
+            // Only fire callback if the value actually changed
+            if lastDiffStatsValue[target.sessionId] == stats { continue }
+            lastDiffStatsValue[target.sessionId] = stats
+
             DispatchQueue.main.async { [weak self] in
                 self?.onDiffStats(target.sessionId, stats)
             }
@@ -134,8 +158,8 @@ public class GitInfoPoller {
     }
 
     /// Run `git diff --shortstat origin/<default>..HEAD` in the session's cwd.
-    private static func fetchDiffStats(cwd: String) -> DiffStats? {
-        guard let defaultBranch = resolveDefaultBranch(cwd: cwd) else { return nil }
+    private func fetchDiffStats(cwd: String) -> DiffStats? {
+        guard let defaultBranch = cachedDefaultBranch(cwd: cwd) else { return nil }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
@@ -156,7 +180,17 @@ public class GitInfoPoller {
         let output =
             String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
-        return parseDiffShortstat(output)
+        return Self.parseDiffShortstat(output)
+    }
+
+    /// Return the cached default branch for a cwd, resolving it on first access.
+    private func cachedDefaultBranch(cwd: String) -> String? {
+        if let cached = defaultBranchCache[cwd] {
+            return cached
+        }
+        guard let branch = Self.resolveDefaultBranch(cwd: cwd) else { return nil }
+        defaultBranchCache[cwd] = branch
+        return branch
     }
 
     /// Detect the default branch (main/master) for the repo.
@@ -174,7 +208,8 @@ public class GitInfoPoller {
             symRef.waitUntilExit()
             if symRef.terminationStatus == 0 {
                 let out =
-                    String(data: symPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                    String(
+                        data: symPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
                     ?? ""
                 let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let last = trimmed.split(separator: "/").last {
@@ -208,20 +243,19 @@ public class GitInfoPoller {
         var additions = 0
         var deletions = 0
 
-        // Match "N insertion" and "N deletion"
         let scanner = trimmed as NSString
         let insertRange = scanner.range(of: #"(\d+) insertion"#, options: .regularExpression)
         if insertRange.location != NSNotFound {
-            let numRange = (trimmed as NSString).range(of: #"\d+"#, options: .regularExpression,
-                                                       range: insertRange)
+            let numRange = scanner.range(
+                of: #"\d+"#, options: .regularExpression, range: insertRange)
             if numRange.location != NSNotFound {
                 additions = Int(scanner.substring(with: numRange)) ?? 0
             }
         }
         let deleteRange = scanner.range(of: #"(\d+) deletion"#, options: .regularExpression)
         if deleteRange.location != NSNotFound {
-            let numRange = (trimmed as NSString).range(of: #"\d+"#, options: .regularExpression,
-                                                       range: deleteRange)
+            let numRange = scanner.range(
+                of: #"\d+"#, options: .regularExpression, range: deleteRange)
             if numRange.location != NSNotFound {
                 deletions = Int(scanner.substring(with: numRange)) ?? 0
             }
