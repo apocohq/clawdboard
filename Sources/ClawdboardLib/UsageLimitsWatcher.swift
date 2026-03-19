@@ -25,13 +25,13 @@ public class UsageLimitsWatcher {
     }
 
     public func start() {
-        NSLog("[UsageLimits] Starting watcher, cache file: \(Self.cacheFile.path)")
+        debugLog("[UsageLimits] Starting watcher, cache file: \(Self.cacheFile.path)")
         // Load cached data immediately (no API call needed)
         if let cached = Self.loadCache() {
-            NSLog("[UsageLimits] Loaded cache, 5h=\(cached.fiveHour.utilization)%%")
+            debugLog("[UsageLimits] Loaded cache, 5h=\(cached.fiveHour.utilization)%")
             onChange(cached)
         } else {
-            NSLog("[UsageLimits] No cache found")
+            debugLog("[UsageLimits] No cache found")
         }
         // Fetch fresh if cache is stale
         pollIfNeeded()
@@ -77,13 +77,13 @@ public class UsageLimitsWatcher {
             try process.run()
             process.waitUntilExit()
         } catch {
-            NSLog("[UsageLimits] Keychain: failed to run security CLI: \(error)")
+            debugLog("[UsageLimits] Keychain: failed to run security CLI: \(error)")
             return nil
         }
         guard process.terminationStatus == 0 else {
             let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
             let errStr = String(data: errData, encoding: .utf8) ?? ""
-            NSLog(
+            debugLog(
                 "[UsageLimits] Keychain: security exited \(process.terminationStatus): \(errStr.prefix(200))"
             )
             return nil
@@ -94,14 +94,14 @@ public class UsageLimitsWatcher {
                 in: .whitespacesAndNewlines),
             !jsonString.isEmpty
         else {
-            NSLog("[UsageLimits] Keychain: security returned empty output")
+            debugLog("[UsageLimits] Keychain: security returned empty output")
             return nil
         }
         guard
             let jsonData = jsonString.data(using: .utf8),
             let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
         else {
-            NSLog("[UsageLimits] Keychain: could not parse output: \(jsonString.prefix(200))")
+            debugLog("[UsageLimits] Keychain: could not parse output: \(jsonString.prefix(200))")
             return nil
         }
         // Keychain stores same structure as credentials file: {claudeAiOauth: {accessToken: ...}}
@@ -112,7 +112,7 @@ public class UsageLimitsWatcher {
             token = json["accessToken"] as? String
         }
         guard let token, !token.isEmpty else {
-            NSLog("[UsageLimits] Keychain: no accessToken in JSON")
+            debugLog("[UsageLimits] Keychain: no accessToken in JSON")
             return nil
         }
         return token
@@ -164,7 +164,7 @@ public class UsageLimitsWatcher {
 
     private func pollIfNeeded() {
         let age = Self.cacheAge()
-        NSLog("[UsageLimits] pollIfNeeded, cacheAge=\(age.map { String(Int($0)) } ?? "nil")s")
+        debugLog("[UsageLimits] pollIfNeeded, cacheAge=\(age.map { String(Int($0)) } ?? "nil")s")
         // Skip API call if cache is fresh
         if let age = age, age < Self.minFetchInterval {
             // Recalculate from cache (average/estimated change over time)
@@ -177,11 +177,11 @@ public class UsageLimitsWatcher {
     }
 
     private func fetchFromAPI() {
-        NSLog("[UsageLimits] Fetching from API...")
+        debugLog("[UsageLimits] Fetching from API...")
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             guard let token = Self.readAccessToken() else {
-                NSLog("[UsageLimits] No access token found in credentials file")
+                debugLog("[UsageLimits] No access token found in credentials file")
                 DispatchQueue.main.async {
                     self.onError("No OAuth token found. Sign in to claude.ai.")
                     // Still serve cached data if available
@@ -199,7 +199,7 @@ public class UsageLimitsWatcher {
 
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error {
-                    NSLog("[UsageLimits] Network error: \(error.localizedDescription)")
+                    debugLog("[UsageLimits] Network error: \(error.localizedDescription)")
                     DispatchQueue.main.async {
                         self.onError("Network error: \(error.localizedDescription)")
                         self.onChange(Self.loadCache())
@@ -210,9 +210,9 @@ public class UsageLimitsWatcher {
                     httpResp.statusCode == 200, let data = data
                 else {
                     let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    NSLog("[UsageLimits] API returned \(status), serving cache")
+                    debugLog("[UsageLimits] API returned \(status), serving cache")
                     if let data = data, let body = String(data: data, encoding: .utf8) {
-                        NSLog("[UsageLimits] Body: \(body.prefix(200))")
+                        debugLog("[UsageLimits] Body: \(body.prefix(200))")
                     }
                     DispatchQueue.main.async {
                         self.onError("API error (HTTP \(status))")
@@ -223,8 +223,8 @@ public class UsageLimitsWatcher {
 
                 do {
                     let limits = try JSONDecoder().decode(UsageLimitsResponse.self, from: data)
-                    NSLog(
-                        "[UsageLimits] API success: 5h=\(limits.fiveHour.utilization)%% 7d=\(limits.sevenDay.utilization)%%"
+                    debugLog(
+                        "[UsageLimits] API success: 5h=\(limits.fiveHour.utilization)% 7d=\(limits.sevenDay.utilization)%"
                     )
                     Self.saveCache(limits)
                     let now = Date()
@@ -246,7 +246,7 @@ public class UsageLimitsWatcher {
                         self.onChange(result)
                     }
                 } catch {
-                    NSLog("[UsageLimits] Decode error: \(error)")
+                    debugLog("[UsageLimits] Decode error: \(error)")
                     DispatchQueue.main.async {
                         self.onError("Failed to decode API response")
                         self.onChange(Self.loadCache())

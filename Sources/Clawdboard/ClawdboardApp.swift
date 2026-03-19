@@ -1,14 +1,41 @@
 import AppKit
 import ClawdboardLib
+import ServiceManagement
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // Register as login item (users can disable in System Settings → Login Items)
+        if SMAppService.mainApp.status != .enabled {
+            try? SMAppService.mainApp.register()
+        }
+
+        installCLISymlink()
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             Self.checkAndInstallHooks()
         }
+    }
+
+    /// Creates a symlink at /usr/local/bin/clawdboard pointing to the app binary.
+    private func installCLISymlink() {
+        let binary = Bundle.main.executableURL
+        let symlink = "/usr/local/bin/clawdboard"
+
+        guard let binary else { return }
+
+        // Already correct
+        if let existing = try? FileManager.default.destinationOfSymbolicLink(atPath: symlink),
+            existing == binary.path
+        {
+            return
+        }
+
+        // Remove stale symlink
+        try? FileManager.default.removeItem(atPath: symlink)
+        try? FileManager.default.createSymbolicLink(atPath: symlink, withDestinationPath: binary.path)
     }
 
     static func checkAndInstallHooks() {
@@ -489,7 +516,7 @@ final class MenuBarAppearanceObserver: NSObject {
                 String(describing: type(of: $0)).contains("StatusBar")
             })
         else {
-            NSLog("[MenuBarAppearance] No StatusBarWindow found, will retry")
+            debugLog("[MenuBarAppearance] No StatusBarWindow found, will retry")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                 self?.attachObserver()
             }
@@ -500,13 +527,13 @@ final class MenuBarAppearanceObserver: NSObject {
         let currentlyDark =
             window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         isDark = currentlyDark
-        NSLog("[MenuBarAppearance] Attached to StatusBarWindow, isDark=%d", isDark ? 1 : 0)
+        debugLog("[MenuBarAppearance] Attached to StatusBarWindow, isDark=\(isDark)")
 
         kvoToken = window.observe(\.effectiveAppearance, options: [.new]) {
             [weak self] window, _ in
             let newDark =
                 window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            NSLog("[MenuBarAppearance] Appearance changed, isDark=%d", newDark ? 1 : 0)
+            debugLog("[MenuBarAppearance] Appearance changed, isDark=\(newDark)")
             DispatchQueue.main.async {
                 self?.isDark = newDark
             }

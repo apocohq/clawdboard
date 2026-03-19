@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Terminal body -->
+  <rect x="0" y="0" width="1024" height="1024" rx="0" fill="#2d2d44"/>
+  <rect x="0" y="0" width="1024" height="184" rx="0" fill="#3d3d5c"/>
+  <rect x="0" y="128" width="1024" height="82" fill="#3d3d5c"/>
+  <!-- Window buttons -->
+  <circle cx="112" cy="92" r="28" fill="#ff5f57"/>
+  <circle cx="192" cy="92" r="28" fill="#febc2e"/>
+  <circle cx="272" cy="92" r="28" fill="#28c840"/>
+  <!-- Screen -->
+  <rect x="48" y="224" width="928" height="752" rx="32" fill="#1a1a2e"/>
+
+  <!-- Claude character centered in screen -->
+  <!-- Body -->
+  <rect x="268" y="336" width="488" height="340" rx="40" fill="#E8A88C"/>
+  <!-- Face area -->
+  <rect x="300" y="368" width="424" height="276" rx="20" fill="#F0BCA8"/>
+  <!-- Eyes -->
+  <rect x="348" y="420" width="72" height="72" rx="12" fill="#2d2d44"/>
+  <rect x="604" y="420" width="72" height="72" rx="12" fill="#2d2d44"/>
+  <!-- Nose -->
+  <rect x="484" y="528" width="56" height="40" rx="12" fill="#D4947A"/>
+  <!-- Ears -->
+  <rect x="280" y="296" width="80" height="80" rx="20" fill="#E8A88C"/>
+  <rect x="664" y="296" width="80" height="80" rx="20" fill="#E8A88C"/>
+  <!-- Legs -->
+  <rect x="332" y="676" width="88" height="120" rx="20" fill="#E8A88C"/>
+  <rect x="604" y="676" width="88" height="120" rx="20" fill="#E8A88C"/>
+  <!-- Feet -->
+  <rect x="316" y="760" width="120" height="56" rx="20" fill="#E8A88C"/>
+  <rect x="588" y="760" width="120" height="56" rx="20" fill="#E8A88C"/>
+  <!-- Arms -->
+  <rect x="156" y="432" width="120" height="88" rx="32" fill="#E8A88C"/>
+  <rect x="748" y="432" width="120" height="88" rx="32" fill="#E8A88C"/>
+</svg>
