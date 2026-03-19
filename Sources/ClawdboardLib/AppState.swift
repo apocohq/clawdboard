@@ -36,6 +36,9 @@ public class AppState {
     /// Local sessions from the local watcher
     private var localSessions: [AgentSession] = []
 
+    /// Previous display statuses keyed by session ID — used to detect transitions to needsApproval
+    private var previousStatuses: [String: AgentStatus] = [:]
+
     private static let remoteHostsKey = "remoteHosts"
 
     private let sessionsDir: URL = {
@@ -247,7 +250,25 @@ public class AppState {
             }
         }
 
+        // Detect any session that just transitioned to needsApproval
+        var shouldPlayAlert = false
+        for session in all {
+            let display = session.displayStatus
+            let previous = previousStatuses[session.sessionId]
+            if display == .needsApproval && previous != nil && previous != .needsApproval {
+                shouldPlayAlert = true
+            }
+            previousStatuses[session.sessionId] = display
+        }
+        // Clean up stale entries
+        let activeIds = Set(all.map(\.sessionId))
+        previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
+
         sessions = all
+
+        if shouldPlayAlert {
+            AlertSoundManager.shared.play()
+        }
     }
 
     // MARK: - Session Processing
