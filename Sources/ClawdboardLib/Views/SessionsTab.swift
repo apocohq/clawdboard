@@ -22,31 +22,70 @@ public struct SessionsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(groups, id: \.key) { group in
-                    Text(group.key.split(separator: "/").last.map(String.init) ?? group.key)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .padding(.horizontal, 4)
-                        .padding(.top, group.key == groups.first?.key ? 0 : 6)
-                    ForEach(group.sessions) { session in
-                        AgentRow(
-                            session: session,
-                            isExpanded: appState.expandedSessionId == session.id,
-                            onToggle: { appState.toggleExpanded(sessionId: session.id) },
-                            onFocusiTerm2: session.iterm2SessionId != nil
-                                ? { appState.focusITerm2Session(session) }
-                                : nil,
-                            onFocusVSCode: session.iterm2SessionId == nil
-                                && appState.ideLockInfo(for: session) != nil
-                                ? { appState.focusVSCodeSession(session) }
-                                : nil,
-                            onDelete: { appState.deleteSession(session.id) }
-                        )
+                    let isCollapsed = appState.collapsedGroups.contains(group.key)
+                    let displayName =
+                        group.key.split(separator: "/").last.map(String.init) ?? group.key
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            appState.toggleGroupCollapsed(group.key)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(
+                                systemName: isCollapsed
+                                    ? "chevron.right" : "chevron.down"
+                            )
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            Text(displayName)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                            Spacer()
+                            if isCollapsed {
+                                Text("\(group.sessions.count)")
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 8)
+                    .padding(.trailing, 4)
+                    .padding(.top, group.key == groups.first?.key ? 0 : 10)
+
+                    if !isCollapsed {
+                        ForEach(group.sessions) { session in
+                            AgentRow(
+                                session: session,
+                                isExpanded: appState.expandedSessionId == session.id,
+                                onToggle: {
+                                    appState.toggleExpanded(sessionId: session.id)
+                                },
+                                onFocusiTerm2: session.iterm2SessionId != nil
+                                    ? { appState.focusITerm2Session(session) }
+                                    : nil,
+                                onFocusVSCode: session.iterm2SessionId == nil
+                                    && appState.ideLockInfo(for: session) != nil
+                                    ? { appState.focusVSCodeSession(session) }
+                                    : nil,
+                                onDelete: { appState.deleteSession(session.id) }
+                            )
+                        }
                     }
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
         }
+        .mask(
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 8)
+                Color.black
+            }
+        )
     }
 }

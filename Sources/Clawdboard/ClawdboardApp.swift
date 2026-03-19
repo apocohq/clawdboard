@@ -301,7 +301,7 @@ struct MenuBarLabel: View {
             {
                 Image(nsImage: img)
             } else {
-                Image(systemName: "terminal")
+                Image(systemName: "apple.terminal")
             }
         } else if let image = Self.renderStatusImage(
             approval: approval, waiting: waiting, working: working,
@@ -379,114 +379,35 @@ struct MenuBarLabel: View {
         return image
     }
 
-    /// Render SF Symbols + counts into an NSImage suitable for the menu bar.
-    /// Pill background color depends on state and user's color mode preference.
+    /// Render one colored dot per active session, ordered by urgency.
+    /// Caps at maxDots to keep menu bar compact.
     private static func renderStatusImage(
         approval: Int, waiting: Int, working: Int,
         useRedYellowMode: Bool,
         usagePct: CGFloat? = nil
     ) -> NSImage? {
-        var segments: [(symbol: String, count: Int)] = []
-        if approval > 0 {
-            segments.append(("exclamationmark.triangle.fill", approval))
-        }
-        if waiting > 0 {
-            segments.append(("hourglass", waiting))
-        }
-        if working > 0 {
-            segments.append(("bolt.fill", working))
-        }
-        guard !segments.isEmpty else { return nil }
+        // Build dot list: most urgent first
+        var dots: [NSColor] = []
+        for _ in 0..<approval { dots.append(.systemRed) }
+        for _ in 0..<waiting { dots.append(.systemOrange) }
+        for _ in 0..<working { dots.append(.systemGreen) }
+        guard !dots.isEmpty else { return nil }
 
-        // Determine pill background color based on mode:
-        // Red+Yellow mode: red for approval, yellow for waiting-only
-        // Yellow-only mode: yellow for approval, no pill for waiting-only
-        let pillColor: NSColor?
-        let needsDarkText: Bool
-        if approval > 0 && useRedYellowMode {
-            pillColor = .systemRed
-            needsDarkText = false
-        } else if approval > 0 {
-            pillColor = .systemYellow
-            needsDarkText = true
-        } else if waiting > 0 && useRedYellowMode {
-            pillColor = .systemYellow
-            needsDarkText = true
-        } else {
-            pillColor = nil
-            needsDarkText = false
-        }
+        let maxDots = 8
+        let capped = dots.prefix(maxDots)
 
-        let hasPill = pillColor != nil
-        let foreground: NSColor
-        let dotForeground: NSColor
-        if hasPill {
-            foreground = needsDarkText ? .black : .white
-            dotForeground =
-                needsDarkText
-                ? .black.withAlphaComponent(0.5) : .white.withAlphaComponent(0.7)
-        } else {
-            // Template mode: draw in black, macOS adapts to menu bar
-            foreground = .black
-            dotForeground = .gray
-        }
-
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
-        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        let textAttrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: foreground,
-        ]
-        let dotAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
-            .foregroundColor: dotForeground,
-        ]
-
-        let result = NSMutableAttributedString()
-
-        for (index, segment) in segments.enumerated() {
-            if index > 0 {
-                result.append(NSAttributedString(string: " · ", attributes: dotAttrs))
-            }
-
-            if var symbolImage = NSImage(
-                systemSymbolName: segment.symbol, accessibilityDescription: nil
-            ) {
-                symbolImage = symbolImage.withSymbolConfiguration(symbolConfig) ?? symbolImage
-                if hasPill {
-                    let tinted = NSImage(size: symbolImage.size)
-                    tinted.lockFocus()
-                    symbolImage.draw(in: NSRect(origin: .zero, size: symbolImage.size))
-                    foreground.set()
-                    NSRect(origin: .zero, size: symbolImage.size).fill(using: .sourceIn)
-                    tinted.unlockFocus()
-                    symbolImage = tinted
-                }
-                let attachment = NSTextAttachment()
-                attachment.image = symbolImage
-                let mid = font.capHeight / 2
-                attachment.bounds = CGRect(
-                    x: 0, y: mid - symbolImage.size.height / 2,
-                    width: symbolImage.size.width, height: symbolImage.size.height
-                )
-                result.append(NSAttributedString(attachment: attachment))
-            }
-
-            result.append(NSAttributedString(string: "\(segment.count)", attributes: textAttrs))
-        }
-
-        let textSize = result.size()
-        let hPad: CGFloat = hasPill ? 4.0 : 0
+        let dotSize: CGFloat = 8
+        let dotSpacing: CGFloat = 4
         let menuBarHeight = NSStatusBar.system.thickness
 
         let ringDiameter: CGFloat = 14
-        let ringSpacing: CGFloat = 4
+        let ringSpacing: CGFloat = 6
         let hasRing = usagePct != nil
-        let ringPadRight: CGFloat = (hasRing && hasPill) ? hPad : 0
-        let ringExtra: CGFloat = hasRing ? (ringSpacing + ringDiameter + ringPadRight) : 0
+        let ringExtra: CGFloat = hasRing ? (ringSpacing + ringDiameter) : 0
 
+        let dotsWidth = CGFloat(capped.count) * dotSize + CGFloat(capped.count - 1) * dotSpacing
         let imageSize = NSSize(
-            width: ceil(textSize.width) + hPad * 2 + ringExtra,
+            width: dotsWidth + ringExtra,
             height: menuBarHeight
         )
         let (rep, _) = makeMenuBarRep(size: imageSize)
@@ -494,27 +415,21 @@ struct MenuBarLabel: View {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 
-        if let color = pillColor {
-            // Pill covers everything including the ring
-            let pillRect = NSRect(origin: .zero, size: imageSize)
-            let path = NSBezierPath(roundedRect: pillRect, xRadius: 4, yRadius: 4)
+        // Draw dots
+        let dotY = (menuBarHeight - dotSize) / 2
+        for (index, color) in capped.enumerated() {
+            let x = CGFloat(index) * (dotSize + dotSpacing)
+            let dotRect = NSRect(x: x, y: dotY, width: dotSize, height: dotSize)
             color.setFill()
-            path.fill()
+            NSBezierPath(ovalIn: dotRect).fill()
         }
 
-        let textY = (imageSize.height - textSize.height) / 2
-        result.draw(at: NSPoint(x: hPad, y: textY))
-
-        // Ring after the pill
+        // Optional usage ring
         if let pct = usagePct {
-            let pillWidth = ceil(textSize.width) + hPad * 2
+            let ringX = dotsWidth + ringSpacing + ringDiameter / 2
             drawRing(
-                center: NSPoint(
-                    x: pillWidth + ringSpacing + ringDiameter / 2,
-                    y: menuBarHeight / 2
-                ),
-                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct,
-                color: foreground
+                center: NSPoint(x: ringX, y: menuBarHeight / 2),
+                radius: ringDiameter / 2 - 2, lineWidth: 2.5, pct: pct
             )
         }
 
@@ -522,8 +437,7 @@ struct MenuBarLabel: View {
 
         let image = NSImage(size: imageSize)
         image.addRepresentation(rep)
-        // Template when no pill — ring is black so it adapts too
-        image.isTemplate = !hasPill
+        image.isTemplate = false
         return image
     }
 }

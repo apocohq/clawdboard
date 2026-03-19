@@ -47,16 +47,15 @@ public struct AgentRow: View {
                             Text(host)
                             Text("·")
                         }
+                        Text(session.displayStatus.displayLabel)
                         if session.isHookTracked {
+                            Text("·")
                             Text(session.shortModelName)
                             if let branch = session.gitBranch {
                                 Text("·")
                                 Text(branch)
                             }
-                            Text("·")
                         }
-                        Text(session.displayStatus.displayLabel)
-                            .foregroundStyle(session.displayStatus.displayColor)
                         if session.displayStatus == .abandoned,
                             let updatedAt = session.updatedAt
                         {
@@ -78,28 +77,9 @@ public struct AgentRow: View {
                 Spacer()
 
                 HStack(spacing: 0) {
-                    if session.displayStatus == .abandoned, let onDelete = onDelete {
-                        Button(action: onDelete) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in
-                            if hovering {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                        .help("Delete session")
-                    }
-
                     if let onFocusiTerm2 = onFocusiTerm2 {
                         Button(action: onFocusiTerm2) {
-                            Image(systemName: "terminal")
+                            Image(systemName: "apple.terminal")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 28, height: 28)
@@ -118,7 +98,7 @@ public struct AgentRow: View {
 
                     if let onFocusVSCode = onFocusVSCode {
                         Button(action: onFocusVSCode) {
-                            Image(systemName: "curlybraces")
+                            Image(systemName: "macwindow")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 28, height: 28)
@@ -216,23 +196,23 @@ public struct AgentRow: View {
             if let subagents = session.subagents, !subagents.isEmpty {
                 Divider()
                     .padding(.vertical, 2)
-                Text("Subagents")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                ForEach(subagents) { subagent in
-                    HStack(spacing: 6) {
+                ForEach(Array(subagents.enumerated()), id: \.element.id) { index, subagent in
+                    HStack {
+                        Text(index == 0 ? "Agents" : "")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 60, alignment: .trailing)
                         Circle()
                             .fill(.green)
                             .frame(width: 5, height: 5)
                         Text(subagent.agentType)
-                            .font(.caption)
+                            .font(.caption.monospaced())
+                            .lineLimit(1)
                         Spacer()
-                        Text(subagent.agentId.prefix(8))
+                        Text(String(subagent.agentId.prefix(8)))
                             .font(.caption2.monospaced())
                             .foregroundStyle(.tertiary)
                     }
-                    .padding(.leading, 66)
                 }
             }
 
@@ -245,6 +225,28 @@ public struct AgentRow: View {
                     Spacer()
                 }
                 .padding(.top, 2)
+            }
+
+            if let onDelete = onDelete {
+                HStack {
+                    Spacer()
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .help("Delete session")
+                }
             }
         }
     }

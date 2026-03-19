@@ -13,19 +13,15 @@ public struct SessionsContent: View {
         if let limits = appState.usageLimits {
             UsageLimitsView(
                 limits: limits,
-                error: appState.usageLimitsError,
-                onRefresh: { appState.refreshUsageLimits() }
+                error: appState.usageLimitsError
             )
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
 
-        Divider()
-            .padding(.bottom, 4)
-
         if appState.sessions.isEmpty {
             VStack(spacing: 6) {
-                Image(systemName: "terminal")
+                Image(systemName: "apple.terminal")
                     .font(.title2)
                     .foregroundStyle(.tertiary)
                 Text("No active sessions")
@@ -132,6 +128,16 @@ public struct PanelView: View {
             .toggleStyle(.checkbox)
             .controlSize(.small)
 
+            if let limits = appState.usageLimits {
+                Button { appState.refreshUsageLimits() } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Usage updated \(Self.updatedText(limits.updatedAt))")
+            }
+
             Menu {
                 SettingsLink {
                     Text("Settings...")
@@ -151,6 +157,16 @@ public struct PanelView: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
         }
+    }
+
+    static func updatedText(_ date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        if interval < 5 { return "just now" }
+        if interval < 60 { return "\(Int(interval))s ago" }
+        let minutes = Int(interval / 60)
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        return "\(hours)h ago"
     }
 }
 

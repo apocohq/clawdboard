@@ -22,6 +22,7 @@ public class AppState {
     // MARK: - UI State
 
     public var expandedSessionId: String?
+    public var collapsedGroups: Set<String> = []
 
     // MARK: - Dependencies
 
@@ -321,6 +322,14 @@ public class AppState {
             expandedSessionId = nil
         } else {
             expandedSessionId = sessionId
+        }
+    }
+
+    public func toggleGroupCollapsed(_ groupKey: String) {
+        if collapsedGroups.contains(groupKey) {
+            collapsedGroups.remove(groupKey)
+        } else {
+            collapsedGroups.insert(groupKey)
         }
     }
 
