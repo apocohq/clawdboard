@@ -340,3 +340,16 @@ Sessions are sorted by urgency (most attention-needed first):
 5. **Idle/Abandoned** (sort order 5)
 
 Within each status group, sessions are grouped alphabetically by GitHub repo slug (or project name for local repos), displayed as uppercase section headers.
+
+---
+
+## Platform Behavior
+
+Clawdboard must respect standard macOS behaviors. Never hardcode values that the system provides dynamically.
+
+### Appearance Adaptation
+
+- **Menu bar tinting**: The menu bar appearance is driven by the wallpaper behind it, not system dark/light mode. Any non-template rendering in the menu bar must observe the `NSStatusBarWindow.effectiveAppearance` and redraw when it changes.
+- **Template images**: Use `isTemplate = true` for menu bar elements that should follow system tinting (e.g. the usage ring). Only use `isTemplate = false` for elements that must preserve explicit colors (e.g. status dots).
+- **Semantic colors**: Use SwiftUI semantic colors (`.primary`, `.secondary`, etc.) throughout the panel UI — these adapt to light/dark mode automatically.
+- **System notifications**: Observe and react to system appearance changes (wallpaper, dark mode, space switches). Do not assume appearance is static for the lifetime of the app.
