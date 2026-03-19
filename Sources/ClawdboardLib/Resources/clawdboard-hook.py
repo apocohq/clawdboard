@@ -296,6 +296,59 @@ def write_state(state_file: Path, state: JsonDict) -> None:
     tmp.rename(state_file)
 
 
+_TITLE_SCRIPT = """\
+import json, os, subprocess
+from pathlib import Path
+
+state_file = Path(os.environ["_CLAWDBOARD_STATE_FILE"])
+prompts = json.loads(os.environ["_CLAWDBOARD_PROMPTS"])
+
+prompt_text = "\\n".join(f"Message {i+1}: {p}" for i, p in enumerate(prompts))
+claude_prompt = (
+    "Given these user messages from a coding session, generate a short "
+    "descriptive title (3-6 words, no quotes, no period). "
+    "Just output the title, nothing else.\\n\\n"
+    + prompt_text
+)
+
+try:
+    result = subprocess.run(
+        ["claude", "-p", claude_prompt, "--output-format", "text"],
+        capture_output=True, text=True, timeout=30,
+    )
+    title = result.stdout.strip()[:80] if result.returncode == 0 else ""
+except Exception:
+    title = ""
+
+try:
+    state = json.loads(state_file.read_text())
+    if title:
+        state["title"] = title
+    state.pop("title_generating", None)
+    tmp = state_file.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.rename(state_file)
+except Exception:
+    pass
+"""
+
+
+def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
+    """Spawn a detached process to generate a session title via claude CLI."""
+    env = os.environ.copy()
+    env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
+    env["_CLAWDBOARD_PROMPTS"] = json.dumps(user_prompts)
+
+    subprocess.Popen(
+        [sys.executable, "-c", _TITLE_SCRIPT],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+        start_new_session=True,
+    )
+
+
 def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
     for key in TRANSCRIPT_KEYS:
         if key in transcript_data and transcript_data[key] is not None:
@@ -403,12 +456,32 @@ def handle_user_prompt_submit(
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
     state["status"] = "working"
     state["updated_at"] = now
-    # Capture the first user prompt as the session name
+    # Capture the first user prompt as a fallback label
     if prompt and not state.get("first_prompt"):
-        # Take first line, strip whitespace, truncate to 100 chars
         first_line = prompt.strip().split("\n")[0].strip()
         if first_line:
             state["first_prompt"] = first_line[:100]
+
+    # Track user message count and accumulate prompts for title generation
+    count = state.get("user_message_count", 0) + 1
+    state["user_message_count"] = count
+    prompts = state.get("user_prompts", [])
+    if len(prompts) < 3 and prompt:
+        first_line = prompt.strip().split("\n")[0].strip()[:200]
+        if first_line:
+            prompts.append(first_line)
+        state["user_prompts"] = prompts
+
+    # Generate title on message 1 (quick) and message 3 (refined)
+    # Message 3 always triggers even if message 1 generation is still running
+    should_generate = count in (1, 3) and prompts
+    if should_generate and (count == 3 or not state.get("title_generating")):
+        state["title_generating"] = True
+        merge_transcript_data(state, data)
+        write_state(state_file, state)
+        generate_title_async(state_file, prompts)
+        return
+
     merge_transcript_data(state, data)
     write_state(state_file, state)
 

@@ -234,7 +234,10 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// iTerm2 session UUID, written back by the iTerm2 integration script
     public var iterm2SessionId: String?
 
-    /// The first user prompt, used as a session label
+    /// AI-generated session title (available after title generation completes)
+    public var title: String?
+
+    /// The first user prompt, used as a fallback label
     public var firstPrompt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -254,6 +257,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case remoteHost = "remote_host"
         case githubRepo = "github_repo"
         case iterm2SessionId = "iterm2_session_id"
+        case title
         case firstPrompt = "first_prompt"
     }
 
@@ -274,6 +278,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         remoteHost: String? = nil,
         githubRepo: String? = nil,
         iterm2SessionId: String? = nil,
+        title: String? = nil,
         firstPrompt: String? = nil
     ) {
         self.sessionId = sessionId
@@ -292,6 +297,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.remoteHost = remoteHost
         self.githubRepo = githubRepo
         self.iterm2SessionId = iterm2SessionId
+        self.title = title
         self.firstPrompt = firstPrompt
     }
 
