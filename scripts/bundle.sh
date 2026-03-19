@@ -26,11 +26,10 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
-# Copy SPM resource bundle next to executable (SPM's Bundle.main.bundleURL
-# resolves to Contents/MacOS/ for executable targets)
+# Copy SPM resource bundle into Contents/Resources/
 BUNDLE_PATH="${BUILD_DIR}/Clawdboard_ClawdboardLib.bundle"
 if [ -d "$BUNDLE_PATH" ]; then
-    cp -R "$BUNDLE_PATH" "${MACOS_DIR}/"
+    cp -R "$BUNDLE_PATH" "${RESOURCES_DIR}/"
 fi
 
 # Copy app icon

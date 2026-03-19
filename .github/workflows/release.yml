@@ -49,7 +49,7 @@ jobs:
         run: ./scripts/bundle.sh
 
       - name: Ad-hoc codesign
-        run: codesign --force -s - Clawdboard.app/Contents/MacOS/Clawdboard
+        run: codesign --force --deep -s - Clawdboard.app
 
       - name: Create zip archive
         run: zip -r "Clawdboard-${{ github.ref_name }}.zip" Clawdboard.app
