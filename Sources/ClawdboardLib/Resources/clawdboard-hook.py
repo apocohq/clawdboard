@@ -22,6 +22,7 @@ JsonDict = dict[str, Any]
 SESSIONS_DIR = Path.home() / ".clawdboard" / "sessions"
 LOG_FILE = Path.home() / ".clawdboard" / "hook-debug.log"
 MODEL_CACHE_FILE = Path.home() / ".clawdboard" / "model-context-windows.json"
+YOLO_MODE_FILE = Path.home() / ".clawdboard" / "yolo-mode"
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
 TITLE_PLACEHOLDERS = [
@@ -229,7 +230,10 @@ def main() -> None:
     elif hook_event == "SessionEnd":
         state_file.unlink(missing_ok=True)
     elif hook_event == "PermissionRequest":
-        handle_permission_request(state_file, now)
+        response = handle_permission_request(state_file, now)
+        if response:
+            print(response)
+            return
     elif hook_event == "SubagentStart":
         handle_subagent_start(state_file, agent_id, agent_type, now)
     elif hook_event == "SubagentStop":
@@ -541,13 +545,29 @@ def handle_notification(state_file: Path, notification_subtype: str, now: str) -
     write_state(state_file, state)
 
 
-def handle_permission_request(state_file: Path, now: str) -> None:
+def is_yolo_mode_enabled() -> bool:
+    """Check if YOLO mode is enabled (auto-approve all permission requests)."""
+    return YOLO_MODE_FILE.is_file()
+
+
+def handle_permission_request(state_file: Path, now: str) -> str | None:
+    """Handle permission request. Returns JSON response if YOLO mode auto-approves."""
+    if is_yolo_mode_enabled():
+        # Auto-approve the permission request
+        state = read_state(state_file)
+        if state is not None:
+            state["status"] = "working"
+            state["updated_at"] = now
+            write_state(state_file, state)
+        return '{"decision": "allow"}'
+
     state = read_state(state_file)
     if state is None:
-        return
+        return None
     state["status"] = "needs_approval"
     state["updated_at"] = now
     write_state(state_file, state)
+    return None
 
 
 def handle_subagent_start(

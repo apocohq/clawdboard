@@ -12,6 +12,7 @@ public struct SettingsView: View {
     @State private var sshConfigHosts: [SSHConfigHost] = []
     @State private var alertSoundName: String? = AlertSoundManager.shared.soundFileName
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var yoloModeEnabled = YoloModeManager.shared.isEnabled
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
     @AppStorage("autoDeleteHours") private var autoDeleteHours: Double = 0.0
@@ -66,6 +67,20 @@ public struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }
+                }
+            }
+
+            Section("Permissions") {
+                Toggle(isOn: $yoloModeEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("YOLO mode")
+                        Text("Auto-approve all permission requests")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: yoloModeEnabled) { _, newValue in
+                    YoloModeManager.shared.isEnabled = newValue
                 }
             }
 
