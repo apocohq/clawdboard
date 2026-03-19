@@ -26,13 +26,13 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
-# SPM's generated resource_bundle_accessor looks at Bundle.main.bundleURL
-# + "Clawdboard_ClawdboardLib.bundle". For a .app, Bundle.main.bundleURL
-# is the .app root. Place it there — codesign signs the binary only.
-BUNDLE_PATH="${BUILD_DIR}/Clawdboard_ClawdboardLib.bundle"
-if [ -d "$BUNDLE_PATH" ]; then
-    cp -R "$BUNDLE_PATH" "${APP_DIR}/"
-fi
+# Copy resource scripts into Contents/Resources/ as a proper bundle.
+# We use our own Bundle.module accessor (BundleAccessor.swift) that
+# checks Bundle.main.resourceURL, so this works with codesigning.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RES_BUNDLE="${RESOURCES_DIR}/Clawdboard_ClawdboardLib.bundle/Resources"
+mkdir -p "$RES_BUNDLE"
+cp "${SCRIPT_DIR}/../Sources/ClawdboardLib/Resources/"*.py "$RES_BUNDLE/"
 
 # Copy app icon
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

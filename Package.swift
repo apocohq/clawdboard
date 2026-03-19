@@ -9,7 +9,7 @@ let package = Package(
         .target(
             name: "ClawdboardLib",
             path: "Sources/ClawdboardLib",
-            resources: [.copy("Resources")],
+            exclude: ["Resources"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
