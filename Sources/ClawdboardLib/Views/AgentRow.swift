@@ -50,15 +50,13 @@ public struct AgentRow: View {
                             Text(session.shortModelName)
                             if let branch = session.gitBranch {
                                 Text("·")
-                                if let prOrCompareUrl = session.prOrCompareUrl,
-                                    let url = URL(string: prOrCompareUrl)
+                                if let compareUrl = session.compareUrl,
+                                    let url = URL(string: compareUrl)
                                 {
                                     Link(destination: url) {
                                         HStack(spacing: 2) {
                                             Image(systemName: "arrow.triangle.pull")
                                                 .font(.caption2)
-                                                .foregroundStyle(
-                                                    session.prUrl != nil ? .blue : .secondary)
                                             Text(branch)
                                         }
                                     }
@@ -187,14 +185,6 @@ public struct AgentRow: View {
         return .secondary
     }
 
-    /// Open the PR or compare URL in the default browser.
-    private func openPROrCompare() {
-        guard let urlString = session.prOrCompareUrl,
-            let url = URL(string: urlString)
-        else { return }
-        NSWorkspace.shared.open(url)
-    }
-
     @ViewBuilder
     private var expandedDetails: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -219,30 +209,6 @@ public struct AgentRow: View {
             }
             DetailRow("Model", session.model ?? "—")
             DetailRow("Branch", session.gitBranch ?? "—")
-            if let prNumber = session.prNumber {
-                let prText = "#\(prNumber)\(session.prTitle.map { " \($0)" } ?? "")"
-                if let prUrl = session.prUrl, let url = URL(string: prUrl) {
-                    HStack {
-                        Text("PR")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 60, alignment: .trailing)
-                        Link(prText, destination: url)
-                            .font(.caption.monospaced())
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .onHover { hovering in
-                        if hovering {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                } else {
-                    DetailRow("PR", prText)
-                }
-            }
             if let diffStats = session.formattedDiffStats {
                 HStack {
                     Text("Changes")

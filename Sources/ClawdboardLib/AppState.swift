@@ -80,7 +80,6 @@ public class AppState {
         remoteWatcher = nil
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
-        gitInfoPoller?.stop()
         gitInfoPoller = nil
     }
 
@@ -185,62 +184,36 @@ public class AppState {
     private func startGitInfoPoller() {
         guard gitInfoPoller == nil else { return }
         gitInfoPoller = GitInfoPoller { [weak self] in
-            // Poller discovered new data — merge it into sessions
-            self?.mergeGitInfo()
+            self?.mergeDiffStats()
         }
-        gitInfoPoller?.start()
     }
 
-    /// Merge cached diff stats and PR info from the poller into session objects.
-    private func mergeGitInfo() {
+    /// Merge cached diff stats from the poller into session objects.
+    /// Mutates the @Observable array directly — SwiftUI picks up the changes.
+    private func mergeDiffStats() {
         guard let poller = gitInfoPoller else { return }
-        var changed = false
         for i in sessions.indices {
-            let id = sessions[i].sessionId
-            if let stats = poller.diffStatsCache[id] {
-                let newAdd = stats.additions
-                let newDel = stats.deletions
-                if sessions[i].additions != newAdd || sessions[i].deletions != newDel {
-                    sessions[i].additions = newAdd
-                    sessions[i].deletions = newDel
-                    changed = true
-                }
-            }
-            if let pr = poller.prInfoCache[id] {
-                if sessions[i].prUrl != pr.url {
-                    sessions[i].prUrl = pr.url
-                    sessions[i].prNumber = pr.number
-                    sessions[i].prTitle = pr.title
-                    changed = true
+            if let stats = poller.diffStatsCache[sessions[i].sessionId] {
+                if sessions[i].additions != stats.additions
+                    || sessions[i].deletions != stats.deletions
+                {
+                    sessions[i].additions = stats.additions
+                    sessions[i].deletions = stats.deletions
                 }
             }
         }
-        // No need to call rebuildSessions — we mutated the @Observable array directly,
-        // so SwiftUI will pick up the changes.
-        _ = changed
     }
 
-    /// Update the git info poller with current session targets.
+    /// Feed current sessions to the diff stats poller.
     private func refreshGitInfoPollerTargets() {
-        let diffTargets = sessions.compactMap { session -> GitInfoPoller.DiffStatsTarget? in
+        let targets = sessions.compactMap { session -> GitInfoPoller.DiffStatsTarget? in
             guard !session.cwd.isEmpty,
                 session.remoteHost == nil,
                 session.displayStatus != .abandoned
             else { return nil }
             return GitInfoPoller.DiffStatsTarget(sessionId: session.sessionId, cwd: session.cwd)
         }
-
-        let prTargets = sessions.compactMap { session -> GitInfoPoller.PRTarget? in
-            guard let repo = session.githubRepo,
-                let branch = session.gitBranch,
-                session.prUrl == nil,
-                session.remoteHost == nil
-            else { return nil }
-            return GitInfoPoller.PRTarget(
-                sessionId: session.sessionId, repo: repo, branch: branch)
-        }
-
-        gitInfoPoller?.updateTargets(diffStats: diffTargets, pr: prTargets)
+        gitInfoPoller?.updateTargets(targets)
     }
 
     // MARK: - IDE Lock Files

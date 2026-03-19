@@ -246,15 +246,6 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// Lines deleted relative to default branch (from git diff --shortstat)
     public var deletions: Int?
 
-    /// Full URL to an open pull request for this branch
-    public var prUrl: String?
-
-    /// PR number (e.g. 42)
-    public var prNumber: Int?
-
-    /// PR title text
-    public var prTitle: String?
-
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -276,9 +267,6 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case firstPrompt = "first_prompt"
         case additions
         case deletions
-        case prUrl = "pr_url"
-        case prNumber = "pr_number"
-        case prTitle = "pr_title"
     }
 
     public init(
@@ -301,10 +289,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         title: String? = nil,
         firstPrompt: String? = nil,
         additions: Int? = nil,
-        deletions: Int? = nil,
-        prUrl: String? = nil,
-        prNumber: Int? = nil,
-        prTitle: String? = nil
+        deletions: Int? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -326,9 +311,6 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.firstPrompt = firstPrompt
         self.additions = additions
         self.deletions = deletions
-        self.prUrl = prUrl
-        self.prNumber = prNumber
-        self.prTitle = prTitle
     }
 
     /// Display title: AI-generated title, or a fun placeholder while generating
@@ -402,15 +384,13 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         return parts.joined(separator: " ")
     }
 
-    /// URL to open for the PR/branch button: existing PR or GitHub compare page
-    public var prOrCompareUrl: String? {
-        if let prUrl = prUrl { return prUrl }
-        if let repo = githubRepo, let branch = gitBranch {
-            let encoded = branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-                ?? branch
-            return "https://github.com/\(repo)/compare/\(encoded)?expand=1"
-        }
-        return nil
+    /// GitHub compare URL for this branch — opens the existing PR if one exists,
+    /// or the "Open a pull request" page if not.
+    public var compareUrl: String? {
+        guard let repo = githubRepo, let branch = gitBranch else { return nil }
+        let encoded = branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? branch
+        return "https://github.com/\(repo)/compare/\(encoded)?expand=1"
     }
 
     /// Human-readable idle duration since a given date

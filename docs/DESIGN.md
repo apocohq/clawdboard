@@ -175,8 +175,7 @@ Single session row with expand/collapse.
 
 **Branch + PR icon** (inline in metadata):
 - SF Symbol: `arrow.triangle.pull`, `.caption2`
-- If `prUrl` exists: icon tinted `.blue`, tapping opens PR in browser
-- If no PR but `githubRepo` set: icon tinted `.secondary`, tapping opens `https://github.com/<repo>/compare/<branch>?expand=1`
+- If `githubRepo` set: tapping opens `https://github.com/<repo>/compare/<branch>?expand=1` (GitHub redirects to existing PR or shows "Open a pull request" page)
 - If no git repo: icon and branch hidden entirely
 - Pointing hand cursor on hover
 
@@ -195,7 +194,7 @@ Single session row with expand/collapse.
 **Expanded details** (below main row):
 - Divider with 2pt vertical padding
 - Context bar row: label (60pt) + bar + percentage
-- DetailRow entries: Host, Model, Branch, PR (clickable link if URL available), Changes (+N −N colored), Session, Uptime, Path
+- DetailRow entries: Host, Model, Branch, Changes (+N −N colored), Session, Uptime, Path
 - Subagents section: "Agents" label (60pt, trailing-aligned) + green 5×5pt dots, agent type, truncated ID — aligned with DetailRow labels
 - "Restart session for full tracking" warning in `.caption2`, `.orange` (if not hook-tracked)
 - Delete button: `trash` icon in `.caption`, `.tertiary`, 28×28pt hit target, right-aligned — shown for deletable sessions (hidden in collapsed row to prevent accidental clicks)
@@ -372,21 +371,17 @@ Inline colored diff stats (used in both metadata line and expanded details).
 ---
 
 ### GitInfoPoller
-**File**: `Sources/ClawdboardLib/GitHubPRPoller.swift`
+**File**: `Sources/ClawdboardLib/GitInfoPoller.swift`
 
-Event-driven git info collector. Diff stats are reactive (triggered by session changes); PR lookup uses a 60s timer. All git/gh commands run off the main thread. Results kept in memory — no state file writes.
+Reactive diff stats collector. Triggered by session changes (no timer/polling) with per-session debounce. Results kept in memory — no state file writes, no rebuild loops.
 
 | Property | Value |
 |----------|-------|
-| Diff stats trigger | Reactive — fires on every `rebuildSessions()` (i.e. every hook event) |
-| Diff stats debounce | 3 seconds per session (skips if fetched recently) |
-| PR poll interval | 60 seconds (timer) |
-| Diff stats command | `git diff --shortstat origin/<default>..HEAD` |
-| PR command | `gh pr list --repo <repo> --head <branch> --json number,url,title --limit 1` |
-| Diff targets | All local non-abandoned sessions with a `cwd` |
-| PR targets | Local sessions with `githubRepo` + `gitBranch` but no `prUrl` |
-| Storage | In-memory caches (`diffStatsCache`, `prInfoCache`) — merged into sessions by AppState |
-| Graceful degradation | Silently skips PR lookup if `gh` CLI not available; diff stats always work |
+| Trigger | Reactive — fires on every `rebuildSessions()` (i.e. every hook event) |
+| Debounce | 3 seconds per session (skips if fetched recently) |
+| Command | `git diff --shortstat origin/<default>..HEAD` |
+| Targets | All local non-abandoned sessions with a `cwd` |
+| Storage | In-memory cache (`diffStatsCache`) — merged into sessions by `AppState.mergeDiffStats()` |
 | Default branch cache | Cached per-cwd for the session lifetime (avoids repeated lookups) |
 | Value dedup | Callback only fires when values actually change |
 | Performance | `git diff --shortstat` ~3ms, default branch resolve ~4ms (first call only) |
