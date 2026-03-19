@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.2"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build universal binary
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Bundle app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_DIR: .build/apple/Products/Release
+          SKIP_BUILD: "1"
+        run: ./scripts/bundle.sh
+
+      - name: Create zip archive
+        run: zip -r "Clawdboard-${{ github.ref_name }}.zip" Clawdboard.app
+
+      - name: Compute SHA256
+        id: sha
+        run: echo "sha256=$(shasum -a 256 Clawdboard-${{ github.ref_name }}.zip | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: Clawdboard-${{ github.ref_name }}.zip
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN secret is not set. Create a fine-grained PAT and add it as a repository secret."
+            exit 1
+          fi
+
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.sha.outputs.sha256 }}"
+          REPO="${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/apocohq/homebrew-clawdboard.git" tap
+          cd tap
+
+          mkdir -p Casks
+          printf 'cask "clawdboard" do\n' > Casks/clawdboard.rb
+          printf '  version "%s"\n' "$VERSION" >> Casks/clawdboard.rb
+          printf '  sha256 "%s"\n' "$SHA256" >> Casks/clawdboard.rb
+          printf '\n' >> Casks/clawdboard.rb
+          printf '  url "https://github.com/%s/releases/download/%s/Clawdboard-%s.zip"\n' "$REPO" "$TAG" "$TAG" >> Casks/clawdboard.rb
+          printf '  name "Clawdboard"\n' >> Casks/clawdboard.rb
+          printf '  desc "macOS menu bar app for monitoring Claude Code agent sessions"\n' >> Casks/clawdboard.rb
+          printf '  homepage "https://github.com/%s"\n' "$REPO" >> Casks/clawdboard.rb
+          printf '\n' >> Casks/clawdboard.rb
+          printf '  depends_on macos: ">= :sonoma"\n' >> Casks/clawdboard.rb
+          printf '\n' >> Casks/clawdboard.rb
+          printf '  app "Clawdboard.app"\n' >> Casks/clawdboard.rb
+          printf '\n' >> Casks/clawdboard.rb
+          printf '  zap trash: "~/.clawdboard"\n' >> Casks/clawdboard.rb
+          printf 'end\n' >> Casks/clawdboard.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/clawdboard.rb
+          git commit -m "Update clawdboard to ${VERSION}"
+          git push

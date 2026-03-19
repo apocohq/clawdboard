@@ -170,6 +170,15 @@ public struct SettingsView: View {
             }
 
             Section("About") {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text(
+                        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                            as? String ?? "dev"
+                    )
+                    .foregroundStyle(.secondary)
+                }
                 Text(
                     "Clawdboard monitors Claude Code sessions via hooks installed in ~/.claude/settings.json"
                 )
