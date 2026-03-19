@@ -95,6 +95,10 @@ jobs:
           printf '\n' >> Casks/clawdboard.rb
           printf '  app "Clawdboard.app"\n' >> Casks/clawdboard.rb
           printf '\n' >> Casks/clawdboard.rb
+          printf '  postflight do\n' >> Casks/clawdboard.rb
+          printf '    system_command "/usr/bin/xattr", args: ["-cr", "#{appdir}/Clawdboard.app"]\n' >> Casks/clawdboard.rb
+          printf '  end\n' >> Casks/clawdboard.rb
+          printf '\n' >> Casks/clawdboard.rb
           printf '  zap trash: "~/.clawdboard"\n' >> Casks/clawdboard.rb
           printf 'end\n' >> Casks/clawdboard.rb
 
