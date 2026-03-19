@@ -429,9 +429,9 @@ struct MenuBarLabel: View {
             NSBezierPath(ovalIn: dotRect).fill()
         }
 
-        // Draw the usage ring using the menu bar's resolved foreground color.
-        // We find the actual NSStatusBarButton to read its effectiveAppearance,
-        // which accounts for wallpaper-driven tinting — not just system dark mode.
+        // Draw the usage ring using the menu bar's resolved foreground color,
+        // derived from the NSStatusBarWindow's effectiveAppearance which
+        // accounts for wallpaper-driven tinting — not just system dark mode.
         if let pct = usagePct {
             let ringColor = statusBarForegroundColor()
             let ringX = dotsWidth + ringSpacing + ringDiameter / 2
