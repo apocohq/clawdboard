@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings form accessible via ⌘, or from the panel.
 public struct SettingsView: View {
@@ -8,6 +9,7 @@ public struct SettingsView: View {
     @State private var iterm2Installed = false
     @State private var isInstallingITerm2 = false
     @State private var sshConfigHosts: [SSHConfigHost] = []
+    @State private var alertSoundName: String? = AlertSoundManager.shared.soundFileName
     @AppStorage("useRedYellowMode") private var useRedYellowMode = true
     @AppStorage("usageRingThreshold") private var usageRingThreshold = 50
     @AppStorage("autoDeleteHours") private var autoDeleteHours: Double = 0.0
@@ -46,6 +48,40 @@ public struct SettingsView: View {
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Notifications") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Approval alert sound")
+                        Text(
+                            alertSoundName ?? "None — plays when a session needs approval"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if alertSoundName != nil {
+                        Button {
+                            AlertSoundManager.shared.play()
+                        } label: {
+                            Image(systemName: "speaker.wave.2")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Preview sound")
+
+                        Button("Clear", role: .destructive) {
+                            AlertSoundManager.shared.clearSoundFile()
+                            alertSoundName = nil
+                        }
+                    }
+
+                    Button("Choose...") {
+                        chooseAlertSound()
                     }
                 }
             }
@@ -270,6 +306,25 @@ public struct SettingsView: View {
     private func uninstallITerm2() {
         ITerm2Installer.uninstall()
         iterm2Installed = false
+    }
+
+    private func chooseAlertSound() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Alert Sound"
+        panel.allowedContentTypes = [
+            UTType.mp3,
+            UTType.wav,
+            UTType.aiff,
+            UTType(filenameExtension: "m4a") ?? UTType.audio,
+        ]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        if panel.runModal() == .OK, let url = panel.url {
+            AlertSoundManager.shared.setSoundFile(url)
+            alertSoundName = AlertSoundManager.shared.soundFileName
+            AlertSoundManager.shared.play()
+        }
     }
 
     private func uninstallHooks() {

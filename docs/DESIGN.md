@@ -291,6 +291,7 @@ Shown when no sessions exist.
 | `chevron.right` / `chevron.down` | Section collapse toggle | 8pt system, `.semibold` |
 | `network` | Remote host indicator | `.caption2` |
 | `gearshape` | Settings menu | `.caption` |
+| `speaker.wave.2` | Preview alert sound | Settings |
 | `arrow.clockwise` | Refresh usage (footer) | `.caption` |
 | `checkmark.circle.fill` | Hooks installed (green) | Settings |
 | `xmark.circle` | No hooks (orange) | Settings |
@@ -326,6 +327,20 @@ Shown when no sessions exist.
 | StatusDot pulse | 1.0s | ease-in-out | Opacity 1.0↔0.4, repeats forever. Active for approval only. |
 | Row expand/collapse | 0.15s | ease-in-out | Bound to `isExpanded` state |
 | Group collapse/expand | 0.15s | ease-in-out | Bound to `collapsedGroups` state |
+
+---
+
+## Audio Alerts
+
+| Trigger | Behavior |
+|---------|----------|
+| Session transitions to **needs approval** | Plays user-configured sound file (MP3/WAV/AIFF/M4A) if set |
+
+- Configured in Settings → General → **Notifications** section
+- "Choose..." opens a native file picker; the selected file is stored as a security-scoped bookmark so it persists across app restarts
+- Preview button (`speaker.wave.2`) plays the sound inline
+- "Clear" removes the configured sound
+- Sound plays once per transition — a session already in approval state won't re-trigger on subsequent rebuilds
 
 ---
 
