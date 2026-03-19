@@ -371,18 +371,22 @@ Inline colored diff stats (used in both metadata line and expanded details).
 
 ---
 
-### GitHubPRPoller
+### GitInfoPoller
 **File**: `Sources/ClawdboardLib/GitHubPRPoller.swift`
 
-Background poller that discovers open PRs for active sessions via `gh pr list`.
+Background poller that collects git diff stats and discovers open PRs for active sessions. All git/gh commands run off the main thread.
 
 | Property | Value |
 |----------|-------|
-| Poll interval | 60 seconds |
-| Command | `gh pr list --repo <repo> --head <branch> --json number,url,title --limit 1` |
-| Targets | Local sessions with `githubRepo` + `gitBranch` but no `prUrl` |
-| Graceful degradation | Silently skips if `gh` CLI not available |
-| Architecture | Follows `UsageLimitsWatcher` pattern — timer + background Process execution |
+| Tick interval | 15 seconds |
+| Diff stats debounce | 10 seconds per session (skips if updated recently) |
+| PR poll cadence | Every 4th tick (60 seconds) |
+| Diff stats command | `git diff --shortstat origin/<default>..HEAD` |
+| PR command | `gh pr list --repo <repo> --head <branch> --json number,url,title --limit 1` |
+| Diff targets | All local non-abandoned sessions with a `cwd` |
+| PR targets | Local sessions with `githubRepo` + `gitBranch` but no `prUrl` |
+| Graceful degradation | Silently skips PR lookup if `gh` CLI not available; diff stats always work |
+| Default branch detection | `git symbolic-ref refs/remotes/origin/HEAD` → fallback to main → master |
 
 ---
 

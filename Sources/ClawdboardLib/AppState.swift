@@ -29,7 +29,7 @@ public class AppState {
     private var stateWatcher: SessionStateWatcher?
     private var remoteWatcher: RemoteSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
-    private var prPoller: GitHubPRPoller?
+    private var gitInfoPoller: GitInfoPoller?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -70,7 +70,7 @@ public class AppState {
 
         startRemoteWatcher()
         startUsageLimitsWatcher()
-        startPRPoller()
+        startGitInfoPoller()
     }
 
     public func stop() {
@@ -80,8 +80,8 @@ public class AppState {
         remoteWatcher = nil
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
-        prPoller?.stop()
-        prPoller = nil
+        gitInfoPoller?.stop()
+        gitInfoPoller = nil
     }
 
     // MARK: - Remote Host Management
@@ -180,19 +180,38 @@ public class AppState {
         usageLimitsWatcher?.refresh()
     }
 
-    // MARK: - PR Poller
+    // MARK: - Git Info Poller
 
-    private func startPRPoller() {
-        guard prPoller == nil else { return }
-        prPoller = GitHubPRPoller { [weak self] sessionId, prInfo in
-            self?.applyPRInfo(sessionId: sessionId, prInfo: prInfo)
-        }
-        prPoller?.start()
+    private func startGitInfoPoller() {
+        guard gitInfoPoller == nil else { return }
+        gitInfoPoller = GitInfoPoller(
+            onDiffStats: { [weak self] sessionId, stats in
+                self?.applyDiffStats(sessionId: sessionId, stats: stats)
+            },
+            onPRInfo: { [weak self] sessionId, prInfo in
+                self?.applyPRInfo(sessionId: sessionId, prInfo: prInfo)
+            }
+        )
+        gitInfoPoller?.start()
     }
 
-    /// Apply PR info discovered by the poller to the matching session state file.
-    private func applyPRInfo(sessionId: String, prInfo: GitHubPRPoller.PRInfo) {
-        // Update local state file so the data persists across rebuilds
+    /// Write diff stats to the session state file.
+    private func applyDiffStats(sessionId: String, stats: GitInfoPoller.DiffStats) {
+        let file = sessionsDir.appendingPathComponent("\(sessionId).json")
+        guard let data = try? Data(contentsOf: file),
+            var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return }
+
+        json["additions"] = stats.additions
+        json["deletions"] = stats.deletions
+
+        if let newData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
+            try? newData.write(to: file, options: .atomic)
+        }
+    }
+
+    /// Write PR info to the session state file.
+    private func applyPRInfo(sessionId: String, prInfo: GitInfoPoller.PRInfo) {
         let file = sessionsDir.appendingPathComponent("\(sessionId).json")
         guard let data = try? Data(contentsOf: file),
             var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -207,18 +226,27 @@ public class AppState {
         }
     }
 
-    /// Update the PR poller with sessions that need PR lookup.
-    private func refreshPRPollerSessions() {
-        let pending = sessions.compactMap {
-            session -> (id: String, repo: String, branch: String)? in
+    /// Update the git info poller with current session targets.
+    private func refreshGitInfoPollerTargets() {
+        let diffTargets = sessions.compactMap { session -> GitInfoPoller.DiffStatsTarget? in
+            guard !session.cwd.isEmpty,
+                session.remoteHost == nil,
+                session.displayStatus != .abandoned
+            else { return nil }
+            return GitInfoPoller.DiffStatsTarget(sessionId: session.sessionId, cwd: session.cwd)
+        }
+
+        let prTargets = sessions.compactMap { session -> GitInfoPoller.PRTarget? in
             guard let repo = session.githubRepo,
                 let branch = session.gitBranch,
                 session.prUrl == nil,
                 session.remoteHost == nil
             else { return nil }
-            return (id: session.sessionId, repo: repo, branch: branch)
+            return GitInfoPoller.PRTarget(
+                sessionId: session.sessionId, repo: repo, branch: branch)
         }
-        prPoller?.updateSessions(pending)
+
+        gitInfoPoller?.updateTargets(diffStats: diffTargets, pr: prTargets)
     }
 
     // MARK: - IDE Lock Files
@@ -310,7 +338,7 @@ public class AppState {
         previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
 
         sessions = all
-        refreshPRPollerSessions()
+        refreshGitInfoPollerTargets()
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()
