@@ -325,7 +325,9 @@ struct MenuBarLabel: View {
         // Read to establish SwiftUI dependency so we redraw on appearance changes
         let _ = menuBarAppearanceObserver.isDark
 
-        if approval == 0 && waiting == 0 && working == 0 {
+        if approval == 0 && waiting == 0 {
+            // No urgent states (approval/waiting) - just show the terminal icon
+            // Blue "working" dots were hard to see against some backgrounds
             if showRing, let pct = usagePct,
                 let img = Self.renderRingOnly(pct: pct)
             {
@@ -419,10 +421,11 @@ struct MenuBarLabel: View {
         usagePct: CGFloat? = nil
     ) -> NSImage? {
         // Build dot list: most urgent first
+        // Only show red (approval) and green (waiting) - these are actionable states
+        // Blue "working" dots were hard to see and don't need user attention
         var dots: [NSColor] = []
         for _ in 0..<approval { dots.append(.systemRed) }
         for _ in 0..<waiting { dots.append(.systemGreen) }
-        for _ in 0..<working { dots.append(.systemBlue) }
         guard !dots.isEmpty else { return nil }
 
         let maxDots = 8
