@@ -26,10 +26,12 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
-# Copy SPM resource bundle into Contents/Resources/
+# SPM's generated resource_bundle_accessor looks at Bundle.main.bundleURL
+# + "Clawdboard_ClawdboardLib.bundle". For a .app, Bundle.main.bundleURL
+# is the .app root. Place it there — codesign signs the binary only.
 BUNDLE_PATH="${BUILD_DIR}/Clawdboard_ClawdboardLib.bundle"
 if [ -d "$BUNDLE_PATH" ]; then
-    cp -R "$BUNDLE_PATH" "${RESOURCES_DIR}/"
+    cp -R "$BUNDLE_PATH" "${APP_DIR}/"
 fi
 
 # Copy app icon

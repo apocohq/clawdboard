@@ -48,9 +48,6 @@ jobs:
           SKIP_BUILD: "1"
         run: ./scripts/bundle.sh
 
-      - name: Ad-hoc codesign
-        run: codesign --force --deep -s - Clawdboard.app
-
       - name: Create zip archive
         run: zip -r "Clawdboard-${{ github.ref_name }}.zip" Clawdboard.app
 
@@ -94,7 +91,6 @@ jobs:
           printf '  depends_on macos: ">= :sonoma"\n' >> Casks/clawdboard.rb
           printf '\n' >> Casks/clawdboard.rb
           printf '  app "Clawdboard.app"\n' >> Casks/clawdboard.rb
-          printf '  binary "#{appdir}/Clawdboard.app/Contents/MacOS/Clawdboard", target: "clawdboard"\n' >> Casks/clawdboard.rb
           printf '\n' >> Casks/clawdboard.rb
           printf '  postflight do\n' >> Casks/clawdboard.rb
           printf '    system_command "/usr/bin/xattr", args: ["-cr", "#{appdir}/Clawdboard.app"]\n' >> Casks/clawdboard.rb

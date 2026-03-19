@@ -19,23 +19,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Creates a symlink at /usr/local/bin/clawdboard pointing to the app binary.
+    /// Installs a wrapper script at /usr/local/bin/clawdboard that opens the .app bundle.
+    /// A direct symlink to the binary won't work because Bundle.main wouldn't resolve
+    /// to the .app, breaking SPM resource bundle lookup.
     private func installCLISymlink() {
-        let binary = Bundle.main.executableURL
-        let symlink = "/usr/local/bin/clawdboard"
-
-        guard let binary else { return }
+        let scriptPath = "/usr/local/bin/clawdboard"
+        let appPath = Bundle.main.bundleURL.path
+        let script = "#!/bin/sh\nopen \"\(appPath)\"\n"
 
         // Already correct
-        if let existing = try? FileManager.default.destinationOfSymbolicLink(atPath: symlink),
-            existing == binary.path
+        if let existing = try? String(contentsOfFile: scriptPath, encoding: .utf8),
+            existing == script
         {
             return
         }
 
-        // Remove stale symlink
-        try? FileManager.default.removeItem(atPath: symlink)
-        try? FileManager.default.createSymbolicLink(atPath: symlink, withDestinationPath: binary.path)
+        try? script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        chmod(scriptPath, 0o755)
     }
 
     static func checkAndInstallHooks() {
