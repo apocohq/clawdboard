@@ -174,19 +174,20 @@ public class HookManager {
     }
 
     /// Load a Python script by name.
-    /// Checks SPM bundle resources first, then falls back to repo-relative paths.
+    /// Checks the .app resource bundle first (brew/release), then falls back
+    /// to the repo source tree (development via `swift run`).
     public static func scriptSource(_ filename: String) throws -> String {
-        // 1. SPM bundle resource (works in all build/install configurations)
-        if let url = Bundle.module.url(
-            forResource: (filename as NSString).deletingPathExtension,
-            withExtension: (filename as NSString).pathExtension
-        ) {
-            if let content = try? String(contentsOf: url, encoding: .utf8) {
-                return content
-            }
+        let baseName = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+
+        // 1. .app bundle: Contents/Resources/ (brew install / bundled .app)
+        if let url = Bundle.main.url(forResource: baseName, withExtension: ext),
+            let content = try? String(contentsOf: url, encoding: .utf8)
+        {
+            return content
         }
 
-        // 2. Repo layout fallback
+        // 2. Repo layout relative to executable (`swift run` → .build/debug/Clawdboard)
         let executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         let repoPath =
             executableURL

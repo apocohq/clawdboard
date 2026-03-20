@@ -46,8 +46,6 @@ public struct AgentRow: View {
                         }
                         Text(session.displayStatus.displayLabel)
                         if session.isHookTracked {
-                            Text("·")
-                            Text(session.shortModelName)
                             if let branch = session.gitBranch {
                                 Text("·")
                                 if let compareUrl = session.compareUrl,
@@ -58,8 +56,11 @@ public struct AgentRow: View {
                                             Image(systemName: "arrow.triangle.pull")
                                                 .font(.caption2)
                                             Text(branch)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
                                         }
                                     }
+                                    .layoutPriority(-1)
                                     .onHover { hovering in
                                         if hovering {
                                             NSCursor.pointingHand.push()
@@ -69,6 +70,9 @@ public struct AgentRow: View {
                                     }
                                 } else {
                                     Text(branch)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .layoutPriority(-1)
                                 }
                             }
                             if let diffStats = session.formattedDiffStats {
@@ -135,17 +139,6 @@ public struct AgentRow: View {
                         .help("Focus in VS Code")
                     }
 
-                    if session.isHookTracked {
-                        Text(session.formattedContext)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(contextColor)
-                            .frame(width: 32, alignment: .trailing)
-                    } else {
-                        Text("—")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 32, alignment: .trailing)
-                    }
                 }
 
             }
@@ -176,13 +169,6 @@ public struct AgentRow: View {
         )
         .opacity(session.isHookTracked ? 1.0 : 0.6)
         .animation(.easeInOut(duration: 0.15), value: isExpanded)
-    }
-
-    private var contextColor: Color {
-        guard let pct = session.contextPct else { return .secondary }
-        if pct >= 90 { return .red }
-        if pct >= 70 { return .orange }
-        return .secondary
     }
 
     @ViewBuilder

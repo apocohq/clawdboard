@@ -27,10 +27,19 @@ public class GitInfoPoller {
         public let deletions: Int
     }
 
+    // MARK: - Serial queue protecting all mutable state
+
+    private let queue = DispatchQueue(label: "clawdboard.gitinfo-poller", qos: .utility)
+
     // MARK: - In-memory cache (read by AppState during mergeGitInfo)
 
-    /// Cached diff stats keyed by session ID.
-    public private(set) var diffStatsCache: [String: DiffStats] = [:]
+    /// Cached diff stats keyed by session ID. Access only from `queue`.
+    private var _diffStatsCache: [String: DiffStats] = [:]
+
+    /// Thread-safe snapshot of diff stats cache.
+    public var diffStatsCache: [String: DiffStats] {
+        queue.sync { _diffStatsCache }
+    }
 
     // MARK: - Session tracking
 
@@ -56,21 +65,24 @@ public class GitInfoPoller {
     /// Update session targets and trigger a debounced diff stats refresh.
     /// Called by AppState from rebuildSessions().
     public func updateTargets(_ newTargets: [DiffStatsTarget]) {
-        targets = newTargets
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.targets = newTargets
 
-        // Clean up caches for sessions that are no longer active
-        let activeIds = Set(newTargets.map(\.sessionId))
-        lastFetch = lastFetch.filter { activeIds.contains($0.key) }
-        diffStatsCache = diffStatsCache.filter { activeIds.contains($0.key) }
+            // Clean up caches for sessions that are no longer active
+            let activeIds = Set(newTargets.map(\.sessionId))
+            self.lastFetch = self.lastFetch.filter { activeIds.contains($0.key) }
+            self._diffStatsCache = self._diffStatsCache.filter { activeIds.contains($0.key) }
 
-        let activeCwds = Set(newTargets.map(\.cwd))
-        defaultBranchCache = defaultBranchCache.filter { activeCwds.contains($0.key) }
+            let activeCwds = Set(newTargets.map(\.cwd))
+            self.defaultBranchCache = self.defaultBranchCache.filter {
+                activeCwds.contains($0.key)
+            }
 
-        // Fetch on background thread
-        let snapshot = targets
-        guard !snapshot.isEmpty else { return }
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.fetchAll(snapshot)
+            // Fetch inline (already on the serial queue)
+            let snapshot = self.targets
+            guard !snapshot.isEmpty else { return }
+            self.fetchAll(snapshot)
         }
     }
 
@@ -93,8 +105,8 @@ public class GitInfoPoller {
             lastFetch[target.sessionId] = now
 
             // Only notify if the value actually changed
-            if diffStatsCache[target.sessionId] != stats {
-                diffStatsCache[target.sessionId] = stats
+            if _diffStatsCache[target.sessionId] != stats {
+                _diffStatsCache[target.sessionId] = stats
                 anyChanged = true
             }
         }

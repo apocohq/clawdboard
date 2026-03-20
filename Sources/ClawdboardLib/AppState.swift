@@ -304,6 +304,18 @@ public class AppState {
         let activeIds = Set(all.map(\.sessionId))
         previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
 
+        // Preserve diff stats from previous cycle (poller cache is the source of truth,
+        // but freshly-parsed sessions arrive with nil additions/deletions).
+        if let poller = gitInfoPoller {
+            let cache = poller.diffStatsCache
+            for i in all.indices {
+                if let stats = cache[all[i].sessionId] {
+                    all[i].additions = stats.additions
+                    all[i].deletions = stats.deletions
+                }
+            }
+        }
+
         sessions = all
         refreshGitInfoPollerTargets()
 
