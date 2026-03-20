@@ -119,14 +119,7 @@ struct ClawdboardApp: App {
         Settings {
             SettingsView()
                 .environment(appState)
-                .onAppear {
-                    for window in NSApplication.shared.windows
-                    where window.identifier?.rawValue.contains("settings") == true
-                        || window.title.contains("Settings")
-                    {
-                        window.level = .floating
-                    }
-                }
+                .background(SettingsWindowConfigurator())
         }
     }
 }
@@ -279,6 +272,19 @@ private final class ToolbarHoverTracker: NSView {
         guard let window = trackedWindow else { return }
         WindowConfigurator.setHoverState(window: window, hovering: false)
     }
+}
+
+/// Ensures the Settings window floats above other windows.
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            view.window?.level = .floating
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// Thin wrapper around MenuBarLabel that optionally opens the floating window at launch.
