@@ -29,7 +29,7 @@ public class AppState {
     private var stateWatcher: SessionStateWatcher?
     private var remoteWatcher: RemoteSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
-    private var gitInfoPoller: GitInfoPoller?
+    private var diffStatsProvider: DiffStatsProvider?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -70,7 +70,7 @@ public class AppState {
 
         startRemoteWatcher()
         startUsageLimitsWatcher()
-        startGitInfoPoller()
+        startDiffStatsProvider()
     }
 
     public func stop() {
@@ -80,7 +80,7 @@ public class AppState {
         remoteWatcher = nil
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
-        gitInfoPoller = nil
+        diffStatsProvider = nil
     }
 
     // MARK: - Remote Host Management
@@ -179,11 +179,11 @@ public class AppState {
         usageLimitsWatcher?.refresh()
     }
 
-    // MARK: - Git Info Poller
+    // MARK: - Diff Stats Provider
 
-    private func startGitInfoPoller() {
-        guard gitInfoPoller == nil else { return }
-        gitInfoPoller = GitInfoPoller { [weak self] in
+    private func startDiffStatsProvider() {
+        guard diffStatsProvider == nil else { return }
+        diffStatsProvider = DiffStatsProvider { [weak self] in
             self?.mergeDiffStats()
         }
     }
@@ -191,9 +191,9 @@ public class AppState {
     /// Merge cached diff stats from the poller into session objects.
     /// Mutates the @Observable array directly — SwiftUI picks up the changes.
     private func mergeDiffStats() {
-        guard let poller = gitInfoPoller else { return }
+        guard let provider = diffStatsProvider else { return }
         for i in sessions.indices {
-            if let stats = poller.diffStatsCache[sessions[i].sessionId] {
+            if let stats = provider.diffStatsCache[sessions[i].sessionId] {
                 if sessions[i].additions != stats.additions
                     || sessions[i].deletions != stats.deletions
                 {
@@ -204,16 +204,16 @@ public class AppState {
         }
     }
 
-    /// Feed current sessions to the diff stats poller.
-    private func refreshGitInfoPollerTargets() {
-        let targets = sessions.compactMap { session -> GitInfoPoller.DiffStatsTarget? in
+    /// Feed current sessions to the diff stats provider.
+    private func refreshDiffStatsProviderTargets() {
+        let targets = sessions.compactMap { session -> DiffStatsProvider.DiffStatsTarget? in
             guard !session.cwd.isEmpty,
                 session.remoteHost == nil,
                 session.displayStatus != .abandoned
             else { return nil }
-            return GitInfoPoller.DiffStatsTarget(sessionId: session.sessionId, cwd: session.cwd)
+            return DiffStatsProvider.DiffStatsTarget(sessionId: session.sessionId, cwd: session.cwd)
         }
-        gitInfoPoller?.updateTargets(targets)
+        diffStatsProvider?.updateTargets(targets)
     }
 
     // MARK: - IDE Lock Files
@@ -306,8 +306,8 @@ public class AppState {
 
         // Preserve diff stats from previous cycle (poller cache is the source of truth,
         // but freshly-parsed sessions arrive with nil additions/deletions).
-        if let poller = gitInfoPoller {
-            let cache = poller.diffStatsCache
+        if let provider = diffStatsProvider {
+            let cache = provider.diffStatsCache
             for i in all.indices {
                 if let stats = cache[all[i].sessionId] {
                     all[i].additions = stats.additions
@@ -317,7 +317,7 @@ public class AppState {
         }
 
         sessions = all
-        refreshGitInfoPollerTargets()
+        refreshDiffStatsProviderTargets()
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()

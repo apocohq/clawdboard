@@ -370,8 +370,8 @@ Inline colored diff stats (used in both metadata line and expanded details).
 
 ---
 
-### GitInfoPoller
-**File**: `Sources/ClawdboardLib/GitInfoPoller.swift`
+### DiffStatsProvider
+**File**: `Sources/ClawdboardLib/DiffStatsProvider.swift`
 
 Reactive diff stats collector. Triggered by session changes (no timer/polling) with per-session debounce. Results kept in memory — no state file writes, no rebuild loops.
 

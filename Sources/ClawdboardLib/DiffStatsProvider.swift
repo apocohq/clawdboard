@@ -11,7 +11,7 @@ import Foundation
 ///
 /// Performance: `git diff --shortstat` ~3ms, default branch resolve ~4ms
 /// (cached per-cwd after first call).
-public class GitInfoPoller {
+public class DiffStatsProvider {
     /// Minimum seconds between diff stats fetches for the same session.
     private static let diffStatsDebounce: TimeInterval = 3
 
@@ -29,7 +29,7 @@ public class GitInfoPoller {
 
     // MARK: - Serial queue protecting all mutable state
 
-    private let queue = DispatchQueue(label: "clawdboard.gitinfo-poller", qos: .utility)
+    private let queue = DispatchQueue(label: "clawdboard.diff-stats-provider", qos: .utility)
 
     // MARK: - In-memory cache (read by AppState during mergeGitInfo)
 
