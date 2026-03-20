@@ -29,6 +29,7 @@ public class AppState {
     private var stateWatcher: SessionStateWatcher?
     private var remoteWatcher: RemoteSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
+    private var diffStatsProvider: DiffStatsProvider?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -69,6 +70,7 @@ public class AppState {
 
         startRemoteWatcher()
         startUsageLimitsWatcher()
+        startDiffStatsProvider()
     }
 
     public func stop() {
@@ -78,6 +80,7 @@ public class AppState {
         remoteWatcher = nil
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
+        diffStatsProvider = nil
     }
 
     // MARK: - Remote Host Management
@@ -176,6 +179,43 @@ public class AppState {
         usageLimitsWatcher?.refresh()
     }
 
+    // MARK: - Diff Stats Provider
+
+    private func startDiffStatsProvider() {
+        guard diffStatsProvider == nil else { return }
+        diffStatsProvider = DiffStatsProvider { [weak self] in
+            self?.mergeDiffStats()
+        }
+    }
+
+    /// Merge cached diff stats from the poller into session objects.
+    /// Mutates the @Observable array directly — SwiftUI picks up the changes.
+    private func mergeDiffStats() {
+        guard let provider = diffStatsProvider else { return }
+        for i in sessions.indices {
+            if let stats = provider.diffStatsCache[sessions[i].sessionId] {
+                if sessions[i].additions != stats.additions
+                    || sessions[i].deletions != stats.deletions
+                {
+                    sessions[i].additions = stats.additions
+                    sessions[i].deletions = stats.deletions
+                }
+            }
+        }
+    }
+
+    /// Feed current sessions to the diff stats provider.
+    private func refreshDiffStatsProviderTargets() {
+        let targets = sessions.compactMap { session -> DiffStatsProvider.DiffStatsTarget? in
+            guard !session.cwd.isEmpty,
+                session.remoteHost == nil,
+                session.displayStatus != .abandoned
+            else { return nil }
+            return DiffStatsProvider.DiffStatsTarget(sessionId: session.sessionId, cwd: session.cwd)
+        }
+        diffStatsProvider?.updateTargets(targets)
+    }
+
     // MARK: - IDE Lock Files
 
     /// Scan ~/.claude/ide/*.lock for IDE window info.
@@ -264,7 +304,20 @@ public class AppState {
         let activeIds = Set(all.map(\.sessionId))
         previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
 
+        // Preserve diff stats from previous cycle (poller cache is the source of truth,
+        // but freshly-parsed sessions arrive with nil additions/deletions).
+        if let provider = diffStatsProvider {
+            let cache = provider.diffStatsCache
+            for i in all.indices {
+                if let stats = cache[all[i].sessionId] {
+                    all[i].additions = stats.additions
+                    all[i].deletions = stats.deletions
+                }
+            }
+        }
+
         sessions = all
+        refreshDiffStatsProviderTargets()
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()

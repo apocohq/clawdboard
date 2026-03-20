@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import sys
-import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -122,6 +122,26 @@ def _load_model_cache() -> dict[str, int]:
         "claude-opus-4-1": 200000,
         "claude-haiku-4-5": 200000,
     }
+
+
+def get_git_branch(cwd: str) -> str | None:
+    """Return the current git branch name for the given directory, or None."""
+    if not cwd:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return None
+        branch = result.stdout.strip()
+        return branch if branch and branch != "HEAD" else None
+    except Exception:
+        return None
 
 
 def get_github_repo(cwd: str) -> str | None:
@@ -369,8 +389,9 @@ def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
 
 def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
     for key in TRANSCRIPT_KEYS:
-        if key in transcript_data and transcript_data[key] is not None:
-            state[key] = transcript_data[key]
+        val = transcript_data.get(key)
+        if val is not None and val != "":
+            state[key] = val
 
 
 def make_base_state(
@@ -412,8 +433,8 @@ def handle_session_start(
         "github_repo": get_github_repo(cwd),
         "status": "working",
         "model": data.get("model") or model or None,
-        "git_branch": data.get("git_branch"),
-        "slug": data.get("slug"),
+        "git_branch": data.get("git_branch") or get_git_branch(cwd),
+        "slug": data.get("slug") or None,
         "context_pct": data.get("context_pct"),
         "started_at": now,
         "updated_at": now,

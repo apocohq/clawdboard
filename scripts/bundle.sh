@@ -26,13 +26,9 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 
-# Copy resource scripts into Contents/Resources/ as a proper bundle.
-# We use our own Bundle.module accessor (BundleAccessor.swift) that
-# checks Bundle.main.resourceURL, so this works with codesigning.
+# Copy resource scripts into Contents/Resources/ so Bundle.main can find them.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RES_BUNDLE="${RESOURCES_DIR}/Clawdboard_ClawdboardLib.bundle/Resources"
-mkdir -p "$RES_BUNDLE"
-cp "${SCRIPT_DIR}/../Sources/ClawdboardLib/Resources/"*.py "$RES_BUNDLE/"
+cp "${SCRIPT_DIR}/../Sources/ClawdboardLib/Resources/"*.py "$RESOURCES_DIR/"
 
 # Copy app icon
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

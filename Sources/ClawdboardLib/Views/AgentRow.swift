@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// A single session row with expand/collapse for details.
@@ -45,11 +46,38 @@ public struct AgentRow: View {
                         }
                         Text(session.displayStatus.displayLabel)
                         if session.isHookTracked {
-                            Text("·")
-                            Text(session.shortModelName)
                             if let branch = session.gitBranch {
                                 Text("·")
-                                Text(branch)
+                                if let compareUrl = session.compareUrl,
+                                    let url = URL(string: compareUrl)
+                                {
+                                    Link(destination: url) {
+                                        HStack(spacing: 2) {
+                                            Image(systemName: "arrow.triangle.pull")
+                                                .font(.caption2)
+                                            Text(branch)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                        }
+                                    }
+                                    .layoutPriority(-1)
+                                    .onHover { hovering in
+                                        if hovering {
+                                            NSCursor.pointingHand.push()
+                                        } else {
+                                            NSCursor.pop()
+                                        }
+                                    }
+                                } else {
+                                    Text(branch)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .layoutPriority(-1)
+                                }
+                            }
+                            if let diffStats = session.formattedDiffStats {
+                                Text("·")
+                                DiffStatsLabel(stats: diffStats)
                             }
                         }
                         if session.displayStatus == .abandoned,
@@ -111,17 +139,6 @@ public struct AgentRow: View {
                         .help("Focus in VS Code")
                     }
 
-                    if session.isHookTracked {
-                        Text(session.formattedContext)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(contextColor)
-                            .frame(width: 32, alignment: .trailing)
-                    } else {
-                        Text("—")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 32, alignment: .trailing)
-                    }
                 }
 
             }
@@ -154,13 +171,6 @@ public struct AgentRow: View {
         .animation(.easeInOut(duration: 0.15), value: isExpanded)
     }
 
-    private var contextColor: Color {
-        guard let pct = session.contextPct else { return .secondary }
-        if pct >= 90 { return .red }
-        if pct >= 70 { return .orange }
-        return .secondary
-    }
-
     @ViewBuilder
     private var expandedDetails: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -185,6 +195,16 @@ public struct AgentRow: View {
             }
             DetailRow("Model", session.model ?? "—")
             DetailRow("Branch", session.gitBranch ?? "—")
+            if let diffStats = session.formattedDiffStats {
+                HStack {
+                    Text("Changes")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 60, alignment: .trailing)
+                    DiffStatsLabel(stats: diffStats)
+                        .font(.caption.monospaced())
+                }
+            }
             DetailRow("Session", session.slug ?? session.sessionId)
             DetailRow("Uptime", session.elapsedTime)
             DetailRow("Path", session.cwd)
@@ -245,5 +265,26 @@ public struct AgentRow: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Diff Stats Label
+
+/// Renders diff stats like "+120 −47" with green for additions and red for deletions.
+struct DiffStatsLabel: View {
+    let stats: String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(parts, id: \.self) { part in
+                Text(part)
+                    .foregroundStyle(part.hasPrefix("+") ? .green : .red)
+            }
+        }
+        .font(.caption.monospacedDigit())
+    }
+
+    private var parts: [String] {
+        stats.split(separator: " ").map(String.init)
     }
 }

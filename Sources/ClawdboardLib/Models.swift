@@ -240,6 +240,12 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// The first user prompt, used as a fallback label
     public var firstPrompt: String?
 
+    /// Lines added relative to default branch (from git diff --shortstat)
+    public var additions: Int?
+
+    /// Lines deleted relative to default branch (from git diff --shortstat)
+    public var deletions: Int?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -259,6 +265,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case iterm2SessionId = "iterm2_session_id"
         case title
         case firstPrompt = "first_prompt"
+        case additions
+        case deletions
     }
 
     public init(
@@ -279,7 +287,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         githubRepo: String? = nil,
         iterm2SessionId: String? = nil,
         title: String? = nil,
-        firstPrompt: String? = nil
+        firstPrompt: String? = nil,
+        additions: Int? = nil,
+        deletions: Int? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -299,6 +309,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.iterm2SessionId = iterm2SessionId
         self.title = title
         self.firstPrompt = firstPrompt
+        self.additions = additions
+        self.deletions = deletions
     }
 
     /// Display title: AI-generated title, or a fun placeholder while generating
@@ -358,6 +370,27 @@ public struct AgentSession: Identifiable, Codable, Equatable {
             return "\(hours)h \(minutes)m"
         }
         return "\(minutes)m"
+    }
+
+    /// Formatted diff stats like "+120 −47", or nil if no data
+    public var formattedDiffStats: String? {
+        guard additions != nil || deletions != nil else { return nil }
+        let add = additions ?? 0
+        let del = deletions ?? 0
+        if add == 0 && del == 0 { return nil }
+        var parts: [String] = []
+        if add > 0 { parts.append("+\(add)") }
+        if del > 0 { parts.append("−\(del)") }
+        return parts.joined(separator: " ")
+    }
+
+    /// GitHub compare URL for this branch — opens the existing PR if one exists,
+    /// or the "Open a pull request" page if not.
+    public var compareUrl: String? {
+        guard let repo = githubRepo, let branch = gitBranch else { return nil }
+        let encoded = branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? branch
+        return "https://github.com/\(repo)/compare/\(encoded)?expand=1"
     }
 
     /// Human-readable idle duration since a given date

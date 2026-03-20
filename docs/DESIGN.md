@@ -171,7 +171,18 @@ Single session row with expand/collapse.
 
 **Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated title when available, otherwise a fun random placeholder (stable per session ID).
 
-**Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
+**Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch (with PR icon), diff stats, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
+
+**Branch + PR icon** (inline in metadata):
+- SF Symbol: `arrow.triangle.pull`, `.caption2`
+- If `githubRepo` set: tapping opens `https://github.com/<repo>/compare/<branch>?expand=1` (GitHub redirects to existing PR or shows "Open a pull request" page)
+- If no git repo: icon and branch hidden entirely
+- Pointing hand cursor on hover
+
+**Diff stats** (inline in metadata, after branch):
+- Format: `+N −N` with `.caption.monospacedDigit()`
+- Additions colored `.green`, deletions colored `.red`
+- Hidden when no diff data or both zero
 
 **Action buttons** (right side, HStack spacing 0):
 - Focus iTerm2: `apple.terminal` at `.body`, `.secondary`
@@ -183,7 +194,7 @@ Single session row with expand/collapse.
 **Expanded details** (below main row):
 - Divider with 2pt vertical padding
 - Context bar row: label (60pt) + bar + percentage
-- DetailRow entries: Host, Model, Branch, Session, Uptime, Path
+- DetailRow entries: Host, Model, Branch, Changes (+N −N colored), Session, Uptime, Path
 - Subagents section: "Agents" label (60pt, trailing-aligned) + green 5×5pt dots, agent type, truncated ID — aligned with DetailRow labels
 - "Restart session for full tracking" warning in `.caption2`, `.orange` (if not hook-tracked)
 - Delete button: `trash` icon in `.caption`, `.tertiary`, 28×28pt hit target, right-aligned — shown for deletable sessions (hidden in collapsed row to prevent accidental clicks)
@@ -287,6 +298,7 @@ Shown when no sessions exist.
 | `apple.terminal` | Empty state, menu bar idle | `.title2` |
 | `apple.terminal` | Focus iTerm2 | `.body` |
 | `macwindow` | Focus VS Code / IDE | `.body` |
+| `arrow.triangle.pull` | PR / branch link (metadata line) | `.caption2` |
 | `trash` | Delete session (expanded detail) | `.caption` |
 | `chevron.right` / `chevron.down` | Section collapse toggle | 8pt system, `.semibold` |
 | `network` | Remote host indicator | `.caption2` |
@@ -341,6 +353,38 @@ Shown when no sessions exist.
 - Preview button (`speaker.wave.2`) plays the sound inline
 - "Clear" removes the configured sound
 - Sound plays once per transition — a session already in approval state won't re-trigger on subsequent rebuilds
+
+---
+
+### DiffStatsLabel
+**File**: `Sources/ClawdboardLib/Views/AgentRow.swift`
+
+Inline colored diff stats (used in both metadata line and expanded details).
+
+| Property | Value |
+|----------|-------|
+| Font | `.caption.monospacedDigit()` |
+| Additions color | `.green` |
+| Deletions color | `.red` |
+| Format | `+N −N` (space-separated, each part independently colored) |
+
+---
+
+### DiffStatsProvider
+**File**: `Sources/ClawdboardLib/DiffStatsProvider.swift`
+
+Reactive diff stats collector. Triggered by session changes (no timer/polling) with per-session debounce. Results kept in memory — no state file writes, no rebuild loops.
+
+| Property | Value |
+|----------|-------|
+| Trigger | Reactive — fires on every `rebuildSessions()` (i.e. every hook event) |
+| Debounce | 3 seconds per session (skips if fetched recently) |
+| Command | `git diff --shortstat origin/<default>..HEAD` |
+| Targets | All local non-abandoned sessions with a `cwd` |
+| Storage | In-memory cache (`diffStatsCache`) — merged into sessions by `AppState.mergeDiffStats()` |
+| Default branch cache | Cached per-cwd for the session lifetime (avoids repeated lookups) |
+| Value dedup | Callback only fires when values actually change |
+| Performance | `git diff --shortstat` ~3ms, default branch resolve ~4ms (first call only) |
 
 ---
 
