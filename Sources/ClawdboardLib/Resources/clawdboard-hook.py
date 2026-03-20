@@ -190,7 +190,7 @@ def main() -> None:
     model: str = hook_input.get("model", "")
     claude_pid = os.getppid()
 
-    if not session_id:
+    if not session_id or os.environ.get("_CLAWDBOARD_TITLE_GEN"):
         print('{"suppressOutput": true}')
         return
 
@@ -352,7 +352,8 @@ claude_prompt = (
 
 try:
     result = subprocess.run(
-        ["claude", "-p", "--no-session-persistence", claude_prompt, "--output-format", "text"],
+        ["claude", "-p", "--no-session-persistence",
+         claude_prompt, "--output-format", "text"],
         capture_output=True, text=True, timeout=30,
     )
     title = result.stdout.strip()[:80] if result.returncode == 0 else ""
@@ -375,6 +376,7 @@ except Exception:
 def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
     """Spawn a detached process to generate a session title via claude CLI."""
     env = os.environ.copy()
+    env["_CLAWDBOARD_TITLE_GEN"] = "1"
     env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
     env["_CLAWDBOARD_PROMPTS"] = json.dumps(user_prompts)
     subprocess.Popen(
