@@ -8,8 +8,8 @@ public struct AgentRow: View {
     public let onActivate: () -> Void
     public let onToggle: () -> Void
     public var onFocusiTerm2: (() -> Void)?
-    public var onFocusVSCode: (() -> Void)?
-    public var ideLabel: String?
+    public var onFocusIDE: (() -> Void)?
+    public var ideName: String?
     public var onDelete: (() -> Void)?
 
     @State private var isHovered = false
@@ -20,8 +20,8 @@ public struct AgentRow: View {
         onActivate: @escaping () -> Void,
         onToggle: @escaping () -> Void,
         onFocusiTerm2: (() -> Void)? = nil,
-        onFocusVSCode: (() -> Void)? = nil,
-        ideLabel: String? = nil,
+        onFocusIDE: (() -> Void)? = nil,
+        ideName: String? = nil,
         onDelete: (() -> Void)? = nil
     ) {
         self.session = session
@@ -29,8 +29,8 @@ public struct AgentRow: View {
         self.onActivate = onActivate
         self.onToggle = onToggle
         self.onFocusiTerm2 = onFocusiTerm2
-        self.onFocusVSCode = onFocusVSCode
-        self.ideLabel = ideLabel
+        self.onFocusIDE = onFocusIDE
+        self.ideName = ideName
         self.onDelete = onDelete
     }
 
@@ -127,17 +127,17 @@ public struct AgentRow: View {
                         Label("Focus in iTerm2", systemImage: "apple.terminal")
                     }
                 }
-                if let onFocusVSCode = onFocusVSCode {
+                if let onFocusIDE = onFocusIDE {
                     Button {
-                        onFocusVSCode()
+                        onFocusIDE()
                     } label: {
                         Label(
-                            "Focus in \(ideLabel ?? "VS Code")",
+                            "Focus in \(ideName ?? "VS Code")",
                             systemImage: "macwindow"
                         )
                     }
                 }
-                if onFocusiTerm2 != nil || onFocusVSCode != nil {
+                if onFocusiTerm2 != nil || onFocusIDE != nil {
                     Divider()
                 }
                 Button {

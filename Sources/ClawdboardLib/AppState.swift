@@ -269,8 +269,7 @@ public class AppState {
             processSession(session, now: now)
         }
 
-        let processedRemote = remoteSessions.values.flatMap { $0 }.compactMap {
-            session -> AgentSession? in
+        let processedRemote = remoteSessions.values.flatMap { $0 }.compactMap { session -> AgentSession? in
             processSession(session, now: now)
         }
 
@@ -412,64 +411,142 @@ public class AppState {
         let focusScript = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".clawdboard/iterm2-focus.py")
         guard FileManager.default.fileExists(atPath: focusScript.path) else { return }
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        task.arguments = [focusScript.path, uuid]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        DispatchQueue.global(qos: .userInitiated).async {
-            try? task.run()
-            task.waitUntilExit()
-        }
+        Self.runProcess("/usr/bin/python3", arguments: [focusScript.path, uuid])
     }
 
-    public func focusVSCodeSession(_ session: AgentSession) {
+    public func focusIDESession(_ session: AgentSession) {
         guard let lock = ideLockInfo(for: session) else { return }
 
         // Use workspace folder from lock file, fall back to session cwd.
         let folderPath = lock.workspaceFolders.first ?? session.cwd
         guard !folderPath.isEmpty else { return }
 
-        // If the folder contains a .code-workspace file, pass that instead so
-        // the `code` CLI focuses the existing workspace window rather than
-        // opening the folder as a new window.
-        let targetPath = Self.findCodeWorkspace(in: folderPath) ?? folderPath
-
-        // Derive CLI command from IDE name.
+        let family = Self.ideFamily(for: lock.ideName)
         let command = Self.cliCommand(for: lock.ideName)
 
-        let fm = FileManager.default
-        let candidates = [
-            "/usr/local/bin/\(command)",
-            "/opt/homebrew/bin/\(command)",
-        ]
+        // For VS Code family, prefer .code-workspace file if present.
+        let targetPath =
+            family == .vscode
+            ? (Self.findCodeWorkspace(in: folderPath) ?? folderPath)
+            : folderPath
 
-        guard let executablePath = candidates.first(where: { fm.isExecutableFile(atPath: $0) })
-        else {
-            DispatchQueue.main.async {
-                Self.showVSCodeCLIAlert(command: command)
+        if let executablePath = Self.findIDEExecutable(command: command, family: family) {
+            Self.runProcess(executablePath, arguments: [targetPath])
+            if family == .jetbrains {
+                Self.activateJetBrainsTerminal()
             }
             return
         }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: executablePath)
-        task.arguments = [targetPath]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
+        // JetBrains fallback: use macOS `open -a` with the IDE's display name.
+        if family == .jetbrains {
+            Self.runProcess("/usr/bin/open", arguments: ["-a", lock.ideName, targetPath]) { status in
+                if status == 0 {
+                    Self.activateJetBrainsTerminal()
+                } else {
+                    DispatchQueue.main.async {
+                        Self.showIDECLIAlert(command: command, family: .jetbrains)
+                    }
+                }
+            }
+            return
+        }
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            try? task.run()
-            task.waitUntilExit()
+        DispatchQueue.main.async {
+            Self.showIDECLIAlert(command: command, family: family)
         }
     }
 
-    /// Map IDE name from the lock file to the corresponding CLI command.
+    // MARK: - Process Helpers
+
+    /// Run an executable asynchronously with stdout/stderr silenced.
+    @discardableResult
+    private static func runProcess(
+        _ executable: String,
+        arguments: [String],
+        completion: ((Int32) -> Void)? = nil
+    ) -> Process {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? task.run()
+            task.waitUntilExit()
+            completion?(task.terminationStatus)
+        }
+        return task
+    }
+
+    /// Send ⌥F12 to the frontmost JetBrains IDE to activate the Terminal tool window.
+    private static func activateJetBrainsTerminal() {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
+            let script = """
+                tell application "System Events"
+                    key code 111 using {option down}
+                end tell
+                """
+            Self.runProcess("/usr/bin/osascript", arguments: ["-e", script])
+        }
+    }
+
+    /// Search standard paths for a CLI executable, returning the first match.
+    private static func findIDEExecutable(command: String, family: IDEFamily) -> String? {
+        let fm = FileManager.default
+        var candidates = [
+            "/usr/local/bin/\(command)",
+            "/opt/homebrew/bin/\(command)",
+        ]
+        if family == .jetbrains {
+            let home = fm.homeDirectoryForCurrentUser.path
+            candidates.insert(
+                "\(home)/Library/Application Support/JetBrains/Toolbox/scripts/\(command)", at: 0)
+        }
+        return candidates.first(where: { fm.isExecutableFile(atPath: $0) })
+    }
+
+    // MARK: - IDE Family
+
+    private enum IDEFamily {
+        case vscode, jetbrains, unknown
+    }
+
+    private struct IDEDefinition {
+        let keyword: String
+        let family: IDEFamily
+        let command: String
+    }
+
+    /// Single source of truth for keyword → (family, CLI command).
+    /// Order matters — "insiders" must precede "code".
+    private static let ideDefinitions: [IDEDefinition] = [
+        // VS Code family
+        .init(keyword: "insiders", family: .vscode, command: "code-insiders"),
+        .init(keyword: "cursor", family: .vscode, command: "cursor"),
+        .init(keyword: "code", family: .vscode, command: "code"),
+        // JetBrains family
+        .init(keyword: "webstorm", family: .jetbrains, command: "webstorm"),
+        .init(keyword: "pycharm", family: .jetbrains, command: "pycharm"),
+        .init(keyword: "intellij", family: .jetbrains, command: "idea"),
+        .init(keyword: "goland", family: .jetbrains, command: "goland"),
+        .init(keyword: "rubymine", family: .jetbrains, command: "rubymine"),
+        .init(keyword: "rider", family: .jetbrains, command: "rider"),
+        .init(keyword: "clion", family: .jetbrains, command: "clion"),
+        .init(keyword: "phpstorm", family: .jetbrains, command: "phpstorm"),
+        .init(keyword: "datagrip", family: .jetbrains, command: "datagrip"),
+        .init(keyword: "rustrover", family: .jetbrains, command: "rustrover"),
+        .init(keyword: "aqua", family: .jetbrains, command: "aqua"),
+    ]
+
+    private static func ideFamily(for ideName: String) -> IDEFamily {
+        let lower = ideName.lowercased()
+        return ideDefinitions.first(where: { lower.contains($0.keyword) })?.family ?? .unknown
+    }
+
     private static func cliCommand(for ideName: String) -> String {
         let lower = ideName.lowercased()
-        if lower.contains("insiders") { return "code-insiders" }
-        if lower.contains("cursor") { return "cursor" }
-        return "code"
+        return ideDefinitions.first(where: { lower.contains($0.keyword) })?.command ?? "code"
     }
 
     /// Look for a single `.code-workspace` file in the given directory.
@@ -485,12 +562,21 @@ public class AppState {
         return workspaceFiles.count == 1 ? workspaceFiles[0].path : nil
     }
 
-    private static func showVSCodeCLIAlert(command: String) {
+    private static func showIDECLIAlert(command: String, family: IDEFamily) {
         let alert = NSAlert()
         alert.messageText = "'\(command)' command not found"
-        alert.informativeText =
-            "Install it from VS Code: open the Command Palette (Cmd+Shift+P) "
-            + "and run \"Shell Command: Install '\(command)' command in PATH\"."
+        switch family {
+        case .vscode:
+            alert.informativeText =
+                "Install it from VS Code: open the Command Palette (Cmd+Shift+P) "
+                + "and run \"Shell Command: Install '\(command)' command in PATH\"."
+        case .jetbrains:
+            alert.informativeText =
+                "Install it via JetBrains Toolbox (Settings > Tools > Shell Scripts) "
+                + "or from the IDE: Tools > Create Command-line Launcher."
+        case .unknown:
+            alert.informativeText = "Could not find the '\(command)' CLI tool on your PATH."
+        }
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()

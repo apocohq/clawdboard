@@ -311,7 +311,7 @@ Shown when no sessions exist.
 |------|-----|------------|
 | `apple.terminal` | Empty state, menu bar idle | `.title2` |
 | `apple.terminal` | Focus iTerm2 | `.body` |
-| `macwindow` | Focus VS Code / IDE | `.body` |
+| `macwindow` | Focus IDE (VS Code, JetBrains, etc.) | `.body` |
 | `arrow.triangle.pull` | PR / branch link (metadata line) | `.caption2` |
 | `trash` | Delete session (expanded detail) | `.caption` |
 | `chevron.right` / `chevron.down` | Section collapse toggle | 8pt system, `.semibold` |
