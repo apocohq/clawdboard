@@ -186,7 +186,7 @@ Single session row with expand/collapse.
 
 **Action buttons** (right side, HStack spacing 0):
 - Focus iTerm2: `apple.terminal` at `.body`, `.secondary`
-- Focus VS Code: `macwindow` at `.body`, `.secondary`
+- Focus IDE: `macwindow` at `.body`, `.secondary`, tooltip reads "Focus in {ideName}" (e.g. "Focus in WebStorm")
 - All buttons: 28×28pt hit target, `.plain` style, pointing hand cursor on hover
 
 **Context percentage**: `.caption2.monospacedDigit()`, 32pt wide trailing-aligned. Color follows the usage gauge color scale when elevated, otherwise `.secondary`. Shows "—" in `.tertiary` if not hook-tracked.
@@ -297,7 +297,7 @@ Shown when no sessions exist.
 |------|-----|------------|
 | `apple.terminal` | Empty state, menu bar idle | `.title2` |
 | `apple.terminal` | Focus iTerm2 | `.body` |
-| `macwindow` | Focus VS Code / IDE | `.body` |
+| `macwindow` | Focus IDE (VS Code, JetBrains, etc.) | `.body` |
 | `arrow.triangle.pull` | PR / branch link (metadata line) | `.caption2` |
 | `trash` | Delete session (expanded detail) | `.caption` |
 | `chevron.right` / `chevron.down` | Section collapse toggle | 8pt system, `.semibold` |
