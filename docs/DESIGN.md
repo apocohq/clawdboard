@@ -20,7 +20,7 @@ All colors are semantic SwiftUI values — they adapt automatically to light/dar
 
 | Status | Color | Used in |
 |--------|-------|---------|
-| Working / Pending | `.blue` | StatusDot, StatusPill, subagent dots, menu bar dot |
+| Working / Pending | `.blue` | StatusDot, StatusPill, subagent dots |
 | Approval | `.red` | StatusDot, StatusPill, menu bar dot |
 | Your turn (waiting) | `.green` | StatusDot, StatusPill, menu bar dot |
 | Idle (abandoned) | `.gray` at 40% opacity | StatusDot |
@@ -74,7 +74,7 @@ The menu bar icon adapts based on session state:
 | Dot size | 8pt diameter |
 | Dot spacing | 4pt between dots |
 | Max dots | 8 (capped) |
-| Dot colors | `.systemRed` (approval), `.systemGreen` (your turn), `.systemBlue` (working) |
+| Dot colors | `.systemRed` (approval), `.systemGreen` (your turn) |
 | Template mode | `false` when dots shown (preserves color) |
 | Usage ring | 14pt diameter, 2.5pt stroke, appended after dots if above threshold |
 
