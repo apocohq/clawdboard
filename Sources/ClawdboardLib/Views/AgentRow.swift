@@ -7,7 +7,8 @@ public struct AgentRow: View {
     public let isExpanded: Bool
     public let onToggle: () -> Void
     public var onFocusiTerm2: (() -> Void)?
-    public var onFocusVSCode: (() -> Void)?
+    public var onFocusIDE: (() -> Void)?
+    public var ideName: String?
     public var onDelete: (() -> Void)?
 
     public init(
@@ -15,14 +16,16 @@ public struct AgentRow: View {
         isExpanded: Bool,
         onToggle: @escaping () -> Void,
         onFocusiTerm2: (() -> Void)? = nil,
-        onFocusVSCode: (() -> Void)? = nil,
+        onFocusIDE: (() -> Void)? = nil,
+        ideName: String? = nil,
         onDelete: (() -> Void)? = nil
     ) {
         self.session = session
         self.isExpanded = isExpanded
         self.onToggle = onToggle
         self.onFocusiTerm2 = onFocusiTerm2
-        self.onFocusVSCode = onFocusVSCode
+        self.onFocusIDE = onFocusIDE
+        self.ideName = ideName
         self.onDelete = onDelete
     }
 
@@ -120,8 +123,8 @@ public struct AgentRow: View {
                         .help("Focus in iTerm2")
                     }
 
-                    if let onFocusVSCode = onFocusVSCode {
-                        Button(action: onFocusVSCode) {
+                    if let onFocusIDE = onFocusIDE {
+                        Button(action: onFocusIDE) {
                             Image(systemName: "macwindow")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
@@ -136,7 +139,7 @@ public struct AgentRow: View {
                                 NSCursor.pop()
                             }
                         }
-                        .help("Focus in VS Code")
+                        .help("Focus in \(ideName ?? "IDE")")
                     }
 
                 }

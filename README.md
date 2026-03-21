@@ -29,6 +29,7 @@ See the **[Setup Guide](docs/SETUP.md)** for details on what gets configured and
 - Model and git branch display
 - "Focus in iTerm2" — switch to the exact terminal pane
 - "Focus in VS Code" — open the correct workspace window
+- "Focus in JetBrains" — open the project and activate the Terminal panel
 - Native macOS tabs support for VS Code
 - Remote host monitoring via SSH
 - Session auto-cleanup for stale/crashed sessions
