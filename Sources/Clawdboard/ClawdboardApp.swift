@@ -7,8 +7,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        // Register as login item (users can disable in System Settings → Login Items)
-        if SMAppService.mainApp.status != .enabled {
+        // Register as login item only when running as a bundled .app
+        // (skip in development when launched via `swift run` from terminal)
+        if Bundle.main.bundlePath.hasSuffix(".app"),
+            SMAppService.mainApp.status != .enabled
+        {
             try? SMAppService.mainApp.register()
         }
 
