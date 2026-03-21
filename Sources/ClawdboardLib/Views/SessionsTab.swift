@@ -57,19 +57,32 @@ public struct SessionsTab: View {
 
                     if !isCollapsed {
                         ForEach(group.sessions) { session in
+                            let hasiTerm2 = session.iterm2SessionId != nil
+                            let ideLock = appState.ideLockInfo(for: session)
+                            let hasIDE = ideLock != nil
+
                             AgentRow(
                                 session: session,
                                 isExpanded: appState.expandedSessionId == session.id,
+                                onActivate: {
+                                    if hasiTerm2 {
+                                        appState.focusITerm2Session(session)
+                                    } else if hasIDE {
+                                        appState.focusVSCodeSession(session)
+                                    } else {
+                                        appState.toggleExpanded(sessionId: session.id)
+                                    }
+                                },
                                 onToggle: {
                                     appState.toggleExpanded(sessionId: session.id)
                                 },
-                                onFocusiTerm2: session.iterm2SessionId != nil
+                                onFocusiTerm2: hasiTerm2
                                     ? { appState.focusITerm2Session(session) }
                                     : nil,
-                                onFocusVSCode: session.iterm2SessionId == nil
-                                    && appState.ideLockInfo(for: session) != nil
+                                onFocusVSCode: hasIDE
                                     ? { appState.focusVSCodeSession(session) }
                                     : nil,
+                                ideLabel: ideLock?.ideName,
                                 onDelete: { appState.deleteSession(session.id) }
                             )
                         }

@@ -157,17 +157,24 @@ Two windows side by side in an HStack with 24pt spacing.
 ### AgentRow
 **File**: `Sources/ClawdboardLib/Views/AgentRow.swift`
 
-Single session row with expand/collapse.
+Single session row. Full row is the primary click target (Fitts's Law).
 
 | Property | Value |
 |----------|-------|
 | Row padding | 6pt vertical, 8pt horizontal |
 | Background | `.quaternary.opacity(0.5)`, 6pt corner radius |
+| Hover background | `.quaternary.opacity(0.8)`, 0.1s ease-in-out |
 | Element spacing | 8pt (HStack) |
 | Expand animation | 0.15s ease-in-out |
 | Fallback opacity | 0.6 — non-hook-tracked sessions are visually dimmed to signal incomplete data |
 
-**Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Action buttons + context %
+**Interaction model**:
+- **Click anywhere on row** = focus session (best available: iTerm2 > VS Code). Falls back to expand/collapse if no IDE/terminal is available.
+- **Disclosure chevron** (trailing edge) = toggle expand/collapse explicitly.
+- **Right-click context menu** = Focus in iTerm2, Focus in VS Code/Cursor, Copy Session ID, Delete Session.
+- **Hover** = background brightens (0.5 → 0.8 opacity) + pointing hand cursor when a focus action is available.
+
+**Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Disclosure chevron
 
 **Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated title when available, otherwise a fun random placeholder (stable per session ID).
 
@@ -184,12 +191,19 @@ Single session row with expand/collapse.
 - Additions colored `.green`, deletions colored `.red`
 - Hidden when no diff data or both zero
 
-**Action buttons** (right side, HStack spacing 0):
-- Focus iTerm2: `apple.terminal` at `.body`, `.secondary`
-- Focus VS Code: `macwindow` at `.body`, `.secondary`
-- All buttons: 28×28pt hit target, `.plain` style, pointing hand cursor on hover
+**Disclosure chevron** (trailing edge):
+- SF Symbol: `chevron.right` (collapsed) / `chevron.down` (expanded)
+- Font: `.system(size: 10, weight: .semibold)`, `.tertiary`
+- Hit target: 20×20pt, `.plain` button style
+- Clicking toggles expand/collapse independently of the row click
 
-**Context percentage**: `.caption2.monospacedDigit()`, 32pt wide trailing-aligned. Color follows the usage gauge color scale when elevated, otherwise `.secondary`. Shows "—" in `.tertiary` if not hook-tracked.
+**Context menu** (right-click):
+- "Focus in iTerm2" (`apple.terminal`) — shown if iTerm2 session exists
+- "Focus in VS Code" / "Focus in Cursor" (`macwindow`) — shown if IDE lock exists, label derived from IDE name
+- Divider (if any focus actions above)
+- "Copy Session ID" (`doc.on.doc`) — always shown
+- Divider
+- "Delete Session" (`trash`, destructive) — always shown
 
 **Expanded details** (below main row):
 - Divider with 2pt vertical padding
@@ -337,6 +351,7 @@ Shown when no sessions exist.
 | Animation | Duration | Curve | Details |
 |-----------|----------|-------|---------|
 | StatusDot pulse | 1.0s | ease-in-out | Opacity 1.0↔0.4, repeats forever. Active for approval only. |
+| Row hover | 0.1s | ease-in-out | Background opacity 0.5↔0.8, bound to `isHovered` state |
 | Row expand/collapse | 0.15s | ease-in-out | Bound to `isExpanded` state |
 | Group collapse/expand | 0.15s | ease-in-out | Bound to `collapsedGroups` state |
 

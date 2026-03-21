@@ -388,7 +388,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// or the "Open a pull request" page if not.
     public var compareUrl: String? {
         guard let repo = githubRepo, let branch = gitBranch else { return nil }
-        let encoded = branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        let encoded =
+            branch.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
             ?? branch
         return "https://github.com/\(repo)/compare/\(encoded)?expand=1"
     }
