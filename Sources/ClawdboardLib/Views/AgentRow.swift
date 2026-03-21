@@ -5,15 +5,19 @@ import SwiftUI
 public struct AgentRow: View {
     public let session: AgentSession
     public let isExpanded: Bool
+    public let onActivate: () -> Void
     public let onToggle: () -> Void
     public var onFocusiTerm2: (() -> Void)?
     public var onFocusIDE: (() -> Void)?
     public var ideName: String?
     public var onDelete: (() -> Void)?
 
+    @State private var isHovered = false
+
     public init(
         session: AgentSession,
         isExpanded: Bool,
+        onActivate: @escaping () -> Void,
         onToggle: @escaping () -> Void,
         onFocusiTerm2: (() -> Void)? = nil,
         onFocusIDE: (() -> Void)? = nil,
@@ -22,6 +26,7 @@ public struct AgentRow: View {
     ) {
         self.session = session
         self.isExpanded = isExpanded
+        self.onActivate = onActivate
         self.onToggle = onToggle
         self.onFocusiTerm2 = onFocusiTerm2
         self.onFocusIDE = onFocusIDE
@@ -64,13 +69,7 @@ public struct AgentRow: View {
                                         }
                                     }
                                     .layoutPriority(-1)
-                                    .onHover { hovering in
-                                        if hovering {
-                                            NSCursor.pointingHand.push()
-                                        } else {
-                                            NSCursor.pop()
-                                        }
-                                    }
+                                    .pointingHandCursor()
                                 } else {
                                     Text(branch)
                                         .lineLimit(1)
@@ -103,52 +102,54 @@ public struct AgentRow: View {
 
                 Spacer()
 
-                HStack(spacing: 0) {
-                    if let onFocusiTerm2 = onFocusiTerm2 {
-                        Button(action: onFocusiTerm2) {
-                            Image(systemName: "apple.terminal")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in
-                            if hovering {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                        .help("Focus in iTerm2")
-                    }
-
-                    if let onFocusIDE = onFocusIDE {
-                        Button(action: onFocusIDE) {
-                            Image(systemName: "macwindow")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in
-                            if hovering {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                        .help("Focus in \(ideName ?? "IDE")")
-                    }
-
+                Button(action: onToggle) {
+                    Image(
+                        systemName: isExpanded
+                            ? "chevron.down" : "chevron.right"
+                    )
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help(isExpanded ? "Collapse" : "Expand")
 
             }
             .contentShape(Rectangle())
-            .onTapGesture { onToggle() }
+            .pointingHandCursor()
+            .onTapGesture { onActivate() }
             .contextMenu {
+                if let onFocusiTerm2 = onFocusiTerm2 {
+                    Button {
+                        onFocusiTerm2()
+                    } label: {
+                        Label("Focus in iTerm2", systemImage: "apple.terminal")
+                    }
+                }
+                if let onFocusIDE = onFocusIDE {
+                    Button {
+                        onFocusIDE()
+                    } label: {
+                        Label(
+                            "Focus in \(ideName ?? "VS Code")",
+                            systemImage: "macwindow"
+                        )
+                    }
+                }
+                if onFocusiTerm2 != nil || onFocusIDE != nil {
+                    Divider()
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(
+                        session.sessionId, forType: .string
+                    )
+                } label: {
+                    Label("Copy Session ID", systemImage: "doc.on.doc")
+                }
                 if let onDelete = onDelete {
+                    Divider()
                     Button(role: .destructive) {
                         onDelete()
                     } label: {
@@ -168,10 +169,12 @@ public struct AgentRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(.quaternary.opacity(0.5))
+                .fill(.quaternary.opacity(isHovered ? 0.8 : 0.5))
         )
+        .onHover { isHovered = $0 }
         .opacity(session.isHookTracked ? 1.0 : 0.6)
         .animation(.easeInOut(duration: 0.15), value: isExpanded)
+        .animation(.easeInOut(duration: 0.1), value: isHovered)
     }
 
     @ViewBuilder
@@ -257,13 +260,7 @@ public struct AgentRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .onHover { hovering in
-                        if hovering {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
+                    .pointingHandCursor()
                     .help("Delete session")
                 }
             }
