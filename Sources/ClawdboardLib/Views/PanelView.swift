@@ -79,7 +79,7 @@ public struct PanelView: View {
             // Status pills — compact: dot + count only
             HStack(spacing: 6) {
                 if appState.needsApprovalCount > 0 {
-                    StatusPill(count: appState.needsApprovalCount, label: "approval", color: .red)
+                    StatusPill(count: appState.needsApprovalCount, label: "approve", color: .red)
                 }
                 if appState.waitingCount > 0 {
                     StatusPill(count: appState.waitingCount, label: "your turn", color: .green)

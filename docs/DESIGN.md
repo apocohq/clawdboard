@@ -21,12 +21,12 @@ All colors are semantic SwiftUI values — they adapt automatically to light/dar
 | Status | Color | Used in |
 |--------|-------|---------|
 | Working / Pending | `.blue` | StatusDot, StatusPill, subagent dots |
-| Approval | `.red` | StatusDot, StatusPill, menu bar dot |
+| Approve | `.red` | StatusDot, StatusPill, menu bar dot |
 | Your turn (waiting) | `.green` | StatusDot, StatusPill, menu bar dot |
-| Idle (abandoned) | `.gray` at 40% opacity | StatusDot |
+| Inactive (abandoned) | `.gray` at 40% opacity | StatusDot |
 | Unknown | `.gray` | StatusDot |
 
-> **Accessibility**: Red and green are indistinguishable for ~8% of men with color vision deficiency. The critical approval/"your turn" distinction does not rely on color alone — approval is the only pulsing state, and the text label in the metadata line provides a third signal. Do not add pulsing to other states without providing an alternative non-color differentiator.
+> **Accessibility**: Red and green are indistinguishable for ~8% of men with color vision deficiency. The critical approve/"your turn" distinction does not rely on color alone — approve is the only pulsing state, and the text label in the metadata line provides a third signal. Do not add pulsing to other states without providing an alternative non-color differentiator.
 
 ### Usage Gauge Colors
 
@@ -74,7 +74,7 @@ The menu bar icon adapts based on session state:
 | Dot size | 8pt diameter |
 | Dot spacing | 4pt between dots |
 | Max dots | 8 (capped) |
-| Dot colors | `.systemRed` (approval), `.systemGreen` (your turn) |
+| Dot colors | `.systemRed` (approve), `.systemGreen` (your turn) |
 | Template mode | `false` when dots shown (preserves color) |
 | Usage ring | 14pt diameter, 2.5pt stroke, appended after dots if above threshold |
 
@@ -108,7 +108,7 @@ Header summary badges showing counts by status.
 | Pill-to-pill spacing | 6pt |
 | Padding | 6pt horizontal, 2pt vertical |
 | Text font | `.caption2` |
-| Labels | "N approval" (red), "N your turn" (green), "N working" (blue) |
+| Labels | "N approve" (red), "N your turn" (green), "N working" (blue) |
 
 Only shown when count > 0 for that status.
 
@@ -137,7 +137,7 @@ Miniature line chart showing context usage over time per session.
 
 | Property | Value |
 |----------|-------|
-| Collapsed size | 80 x 16pt |
+| Collapsed size | 130 x 24pt |
 | Expanded size | 120 x 20pt |
 | Stroke width | 1pt |
 | Fill opacity | 15% under line |
@@ -147,9 +147,36 @@ Miniature line chart showing context usage over time per session.
 
 **Stroke color**: Uses the shared usage gauge color scale based on latest value (see Color System).
 
-**Collapsed placement**: Trailing edge of session row, between content and chevron, paired with context % text. Only shown for hook-tracked sessions with 2+ snapshots.
+**Collapsed placement**: Trailing edge of session row, between content and chevron, paired with PR status icon. Only shown for hook-tracked sessions with 2+ snapshots.
 
 **Expanded placement**: Inline with ContextBar in the details section, providing trend alongside current state.
+
+---
+
+### PRStatusIcon
+**File**: `Sources/ClawdboardLib/Views/Components.swift`
+
+Displays the pull request status for a session's branch using custom-drawn GitHub-style icons (SwiftUI Canvas). Fetched via `gh` CLI on the Swift side (`PRStatusProvider`), not from hooks.
+
+| Property | Value |
+|----------|-------|
+| Icon size | 14 x 14pt |
+| Badge size | 24 x 24pt |
+| Badge corner radius | 6pt |
+| Badge background | Icon color at 12% opacity (22% on hover) |
+| Badge border | Icon color at 30% opacity (50% on hover), 0.5pt |
+
+**States**:
+| Status | Icon | Color | Click action |
+|--------|------|-------|------|
+| No PR / unknown | Dashed rounded rectangle outline (no icon) | `.tertiary` | None |
+| PR open | `PROpenIcon` — Phosphor git-pull-request | `.green` | Opens PR URL |
+| PR merged | `PRMergedIcon` — Phosphor git-merge | `.purple` | Opens PR URL |
+| PR closed | `PRClosedIcon` — Phosphor git-pull-request | `.secondary` | Opens PR URL |
+
+**Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (dashed rectangle when no PR data available).
+
+**Data source**: `PRStatusProvider` polls `gh pr list` with 30s per-session debounce. Requires `gh` CLI to be installed and authenticated. Cache persisted to `~/.clawdboard/pr-status-cache.json` for instant display on app launch.
 
 ---
 
@@ -197,19 +224,19 @@ Single session row. Full row is the primary click target (Fitts's Law).
 - **Right-click context menu** = Focus in iTerm2, Focus in VS Code/Cursor, Copy Session ID, Delete Session.
 - **Hover** = background brightens (0.5 → 0.8 opacity) + pointing hand cursor when a focus action is available.
 
-**Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Disclosure chevron
+**Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Sparkline + PRStatusIcon | Disclosure chevron
 
 **Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated kebab-case slug title (e.g. `api-refactor`, `auth-module`, `docs-update`) when available, otherwise a placeholder slug like `new-session` (stable per session ID).
 
-**Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch (with PR icon), diff stats, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
+**Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
 
-**Branch + PR icon** (inline in metadata):
-- SF Symbol: `arrow.triangle.pull`, `.caption2`
+**Branch** (inline in metadata):
+- Plain text (no icon — PR status is shown via trailing PRStatusIcon)
 - If `githubRepo` set: tapping opens `https://github.com/<repo>/compare/<branch>?expand=1` (GitHub redirects to existing PR or shows "Open a pull request" page)
-- If no git repo: icon and branch hidden entirely
+- If no git repo: branch hidden entirely
 - Pointing hand cursor on hover
 
-**Diff stats** (inline in metadata, after branch):
+**Diff stats** (expanded details only):
 - Format: `+N −N` with `.caption.monospacedDigit()`
 - Additions colored `.green`, deletions colored `.red`
 - Hidden when no diff data or both zero
@@ -430,11 +457,11 @@ Reactive diff stats collector. Triggered by session changes (no timer/polling) w
 
 Sessions are sorted by urgency (most attention-needed first):
 
-1. **Approval** (sort order 0)
+1. **Approve** (sort order 0)
 2. **Your turn** (sort order 1)
 3. **Pending/Working** (sort order 2–3)
 4. **Unknown** (sort order 4)
-5. **Idle/Abandoned** (sort order 5)
+5. **Inactive/Abandoned** (sort order 5)
 
 Within each status group, sessions are grouped alphabetically by GitHub repo slug (or project name for local repos), displayed as uppercase section headers.
 

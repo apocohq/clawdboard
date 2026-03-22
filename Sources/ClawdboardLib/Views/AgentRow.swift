@@ -55,20 +55,16 @@ public struct AgentRow: View {
                                 Text("·")
                             }
                             Text(session.displayStatus.displayLabel)
+                                .frame(width: 56, alignment: .leading)
                             if session.isHookTracked {
                                 if let branch = session.gitBranch {
-                                    Text("·")
                                     if let compareUrl = session.compareUrl,
                                         let url = URL(string: compareUrl)
                                     {
                                         Link(destination: url) {
-                                            HStack(spacing: 2) {
-                                                Image(systemName: "arrow.triangle.pull")
-                                                    .font(.caption2)
-                                                Text(branch)
-                                                    .lineLimit(1)
-                                                    .truncationMode(.middle)
-                                            }
+                                            Text(branch)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
                                         }
                                         .layoutPriority(-1)
                                         .pointingHandCursor()
@@ -79,10 +75,7 @@ public struct AgentRow: View {
                                             .layoutPriority(-1)
                                     }
                                 }
-                                if let diffStats = session.formattedDiffStats {
-                                    Text("·")
-                                    DiffStatsLabel(stats: diffStats)
-                                }
+                                // Diff stats shown in expanded details only
                             }
                             if session.activeSubagentCount > 0 {
                                 Text("·")
@@ -98,15 +91,12 @@ public struct AgentRow: View {
 
                     Spacer()
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: 12) {
                         SparklineView(
                             snapshots: session.contextSnapshots ?? [],
                             approvalTimestamps: session.approvalTimestamps ?? []
                         )
-                        Text(session.formattedContext)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 30, alignment: .trailing)
+                        PRStatusIcon(prInfo: session.prInfo)
                     }
                     .fixedSize()
                 }
@@ -198,11 +188,6 @@ public struct AgentRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(width: 60, alignment: .trailing)
-                    SparklineView(
-                        snapshots: session.contextSnapshots ?? [],
-                        approvalTimestamps: session.approvalTimestamps ?? []
-                    )
-                    .frame(width: 120, height: 20)
                     ContextBar(percentage: pct)
                     Text(session.formattedContext)
                         .font(.caption2.monospacedDigit())

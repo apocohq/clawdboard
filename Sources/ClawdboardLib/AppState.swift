@@ -30,6 +30,7 @@ public class AppState {
     private var remoteWatcher: RemoteSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
     private var diffStatsProvider: DiffStatsProvider?
+    private var prStatusProvider: PRStatusProvider?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -62,6 +63,9 @@ public class AppState {
     // MARK: - Lifecycle
 
     public func start() {
+        startDiffStatsProvider()
+        startPRStatusProvider()
+
         stateWatcher = SessionStateWatcher { [weak self] hookSessions in
             self?.localSessions = hookSessions
             self?.rebuildSessions()
@@ -70,7 +74,6 @@ public class AppState {
 
         startRemoteWatcher()
         startUsageLimitsWatcher()
-        startDiffStatsProvider()
     }
 
     public func stop() {
@@ -81,6 +84,7 @@ public class AppState {
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
         diffStatsProvider = nil
+        prStatusProvider = nil
     }
 
     // MARK: - Remote Host Management
@@ -216,6 +220,39 @@ public class AppState {
         diffStatsProvider?.updateTargets(targets)
     }
 
+    // MARK: - PR Status Provider
+
+    private func startPRStatusProvider() {
+        guard prStatusProvider == nil else { return }
+        prStatusProvider = PRStatusProvider { [weak self] in
+            self?.mergePRStatus()
+        }
+    }
+
+    private func mergePRStatus() {
+        guard let provider = prStatusProvider else { return }
+        for i in sessions.indices {
+            if let info = provider.prInfoCache[sessions[i].sessionId] {
+                if sessions[i].prInfo != info {
+                    sessions[i].prInfo = info
+                }
+            }
+        }
+    }
+
+    private func refreshPRStatusProviderTargets() {
+        let targets = sessions.compactMap { session -> PRStatusProvider.PRStatusTarget? in
+            // Unlike diff stats, PR status is useful even for idle sessions
+            guard session.remoteHost == nil,
+                let repo = session.githubRepo,
+                let branch = session.gitBranch
+            else { return nil }
+            return PRStatusProvider.PRStatusTarget(
+                sessionId: session.sessionId, githubRepo: repo, gitBranch: branch)
+        }
+        prStatusProvider?.updateTargets(targets)
+    }
+
     // MARK: - IDE Lock Files
 
     /// Scan ~/.claude/ide/*.lock for IDE window info.
@@ -315,8 +352,24 @@ public class AppState {
             }
         }
 
+        // Preserve PR info from previous cycle or disk cache.
+        if let provider = prStatusProvider {
+            let sessionCache = provider.prInfoCache
+            for i in all.indices {
+                if let info = sessionCache[all[i].sessionId] {
+                    all[i].prInfo = info
+                } else if let repo = all[i].githubRepo,
+                    let branch = all[i].gitBranch,
+                    let info = provider.cachedInfo(repo: repo, branch: branch)
+                {
+                    all[i].prInfo = info
+                }
+            }
+        }
+
         sessions = all
         refreshDiffStatsProviderTargets()
+        refreshPRStatusProviderTargets()
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()
