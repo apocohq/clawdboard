@@ -38,69 +38,81 @@ public struct AgentRow: View {
         VStack(alignment: .leading, spacing: 0) {
             // Main row
             HStack(spacing: 8) {
-                StatusDot(status: session.displayStatus)
+                // Tappable content area (opens/focuses session)
+                HStack(spacing: 8) {
+                    StatusDot(status: session.displayStatus)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(session.displayTitle)
-                        .font(.system(.body, weight: .medium))
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(session.displayTitle)
+                            .font(.system(.body, weight: .medium))
+                            .lineLimit(1)
 
-                    HStack(spacing: 4) {
-                        if let host = session.remoteHost {
-                            Image(systemName: "network")
-                                .font(.caption2)
-                            Text(host)
-                            Text("·")
-                        }
-                        Text(session.displayStatus.displayLabel)
-                        if session.isHookTracked {
-                            if let branch = session.gitBranch {
+                        HStack(spacing: 4) {
+                            if let host = session.remoteHost {
+                                Image(systemName: "network")
+                                    .font(.caption2)
+                                Text(host)
                                 Text("·")
-                                if let compareUrl = session.compareUrl,
-                                    let url = URL(string: compareUrl)
-                                {
-                                    Link(destination: url) {
-                                        HStack(spacing: 2) {
-                                            Image(systemName: "arrow.triangle.pull")
-                                                .font(.caption2)
-                                            Text(branch)
-                                                .lineLimit(1)
-                                                .truncationMode(.middle)
+                            }
+                            Text(session.displayStatus.displayLabel)
+                            if session.isHookTracked {
+                                if let branch = session.gitBranch {
+                                    Text("·")
+                                    if let compareUrl = session.compareUrl,
+                                        let url = URL(string: compareUrl)
+                                    {
+                                        Link(destination: url) {
+                                            HStack(spacing: 2) {
+                                                Image(systemName: "arrow.triangle.pull")
+                                                    .font(.caption2)
+                                                Text(branch)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.middle)
+                                            }
                                         }
-                                    }
-                                    .layoutPriority(-1)
-                                    .pointingHandCursor()
-                                } else {
-                                    Text(branch)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
                                         .layoutPriority(-1)
+                                        .pointingHandCursor()
+                                    } else {
+                                        Text(branch)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                            .layoutPriority(-1)
+                                    }
+                                }
+                                if let diffStats = session.formattedDiffStats {
+                                    Text("·")
+                                    DiffStatsLabel(stats: diffStats)
                                 }
                             }
-                            if let diffStats = session.formattedDiffStats {
+                            if session.activeSubagentCount > 0 {
                                 Text("·")
-                                DiffStatsLabel(stats: diffStats)
+                                Text(
+                                    "\(session.activeSubagentCount) subagent\(session.activeSubagentCount == 1 ? "" : "s")"
+                                )
                             }
                         }
-                        if session.displayStatus == .abandoned,
-                            let updatedAt = session.updatedAt
-                        {
-                            Text("·")
-                            Text(session.idleSince(updatedAt))
-                        }
-                        if session.activeSubagentCount > 0 {
-                            Text("·")
-                            Text(
-                                "\(session.activeSubagentCount) subagent\(session.activeSubagentCount == 1 ? "" : "s")"
-                            )
-                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                }
 
-                Spacer()
+                    Spacer()
+
+                    HStack(spacing: 4) {
+                        SparklineView(
+                            snapshots: session.contextSnapshots ?? [],
+                            approvalTimestamps: session.approvalTimestamps ?? []
+                        )
+                        Text(session.formattedContext)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, alignment: .trailing)
+                    }
+                    .fixedSize()
+                }
+                .contentShape(Rectangle())
+                .pointingHandCursor()
+                .onTapGesture { onActivate() }
 
                 Button(action: onToggle) {
                     Image(
@@ -116,9 +128,6 @@ public struct AgentRow: View {
                 .help(isExpanded ? "Collapse" : "Expand")
 
             }
-            .contentShape(Rectangle())
-            .pointingHandCursor()
-            .onTapGesture { onActivate() }
             .contextMenu {
                 if let onFocusiTerm2 = onFocusiTerm2 {
                     Button {
@@ -189,6 +198,11 @@ public struct AgentRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(width: 60, alignment: .trailing)
+                    SparklineView(
+                        snapshots: session.contextSnapshots ?? [],
+                        approvalTimestamps: session.approvalTimestamps ?? []
+                    )
+                    .frame(width: 120, height: 20)
                     ContextBar(percentage: pct)
                     Text(session.formattedContext)
                         .font(.caption2.monospacedDigit())

@@ -130,6 +130,29 @@ Horizontal progress bar showing context window usage.
 
 ---
 
+### SparklineView
+**File**: `Sources/ClawdboardLib/Views/Components.swift`
+
+Miniature line chart showing context usage over time per session.
+
+| Property | Value |
+|----------|-------|
+| Collapsed size | 80 x 16pt |
+| Expanded size | 120 x 20pt |
+| Stroke width | 1pt |
+| Fill opacity | 15% under line |
+| Min data points | 2 snapshots to render |
+| Max snapshots | 100 (capped in hook) |
+| Renderer | SwiftUI `Canvas` |
+
+**Stroke color**: Uses the shared usage gauge color scale based on latest value (see Color System).
+
+**Collapsed placement**: Trailing edge of session row, between content and chevron, paired with context % text. Only shown for hook-tracked sessions with 2+ snapshots.
+
+**Expanded placement**: Inline with ContextBar in the details section, providing trend alongside current state.
+
+---
+
 ### UsageWindowView (Progress Bar)
 **File**: `Sources/ClawdboardLib/Views/Components.swift`
 
