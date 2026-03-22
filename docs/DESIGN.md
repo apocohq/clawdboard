@@ -176,7 +176,7 @@ Single session row. Full row is the primary click target (Fitts's Law).
 
 **Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Disclosure chevron
 
-**Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated title when available, otherwise a fun random placeholder (stable per session ID).
+**Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated kebab-case slug title (e.g. `api-refactor`, `auth-module`, `docs-update`) when available, otherwise a placeholder slug like `new-session` (stable per session ID).
 
 **Metadata line**: `.caption`, `.secondary`, dot-separated. Order: remote host icon + name, status label (first), model, branch (with PR icon), diff stats, idle time, subagent count. All items use `.secondary` — the StatusDot already communicates state via color.
 

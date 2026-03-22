@@ -25,21 +25,14 @@ MODEL_CACHE_FILE = Path.home() / ".clawdboard" / "model-context-windows.json"
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
 TITLE_PLACEHOLDERS = [
-    "Thinking really hard...",
-    "Consulting the oracle...",
-    "Summoning creativity...",
-    "Herding electrons...",
-    "Asking the magic 8-ball...",
-    "Warming up the hamsters...",
-    "Reticulating splines...",
-    "Brewing a title...",
-    "Hold my tokens...",
-    "Crunching vibes...",
-    "Tickling the transformer...",
-    "Polishing pixels...",
-    "Wrangling words...",
-    "Spinning up the flux capacitor...",
-    "Petting the neural cat...",
+    "new-session",
+    "getting-started",
+    "loading...",
+    "spinning-up",
+    "warming-up",
+    "initializing",
+    "booting-up",
+    "revving-up",
 ]
 
 
@@ -345,8 +338,11 @@ prompts = json.loads(os.environ["_CLAWDBOARD_PROMPTS"])
 prompt_text = "\\n".join(f"Message {i+1}: {p}" for i, p in enumerate(prompts))
 claude_prompt = (
     "Given these user messages from a coding session, generate a short "
-    "descriptive title (3-6 words, no quotes, no period). "
-    "Just output the title, nothing else.\\n\\n"
+    "kebab-case slug title (1-3 words, lowercase, hyphens between words). "
+    "It should describe the task like a branch name. "
+    "Examples: api-refactor, auth-module, test-suite, docs-update, cleanup, "
+    "fix-login, db-migration, css-overhaul, perf-tuning, dep-upgrade. "
+    "Just output the slug, nothing else.\\n\\n"
     + prompt_text
 )
 
@@ -356,7 +352,11 @@ try:
          claude_prompt, "--output-format", "text"],
         capture_output=True, text=True, timeout=30,
     )
-    title = result.stdout.strip()[:80] if result.returncode == 0 else ""
+    raw = result.stdout.strip().lower().replace(" ", "-")[:40] if result.returncode == 0 else ""
+    # Clean up: keep only alphanumeric and hyphens, collapse multiple hyphens
+    import re
+    title = re.sub(r"[^a-z0-9-]", "", raw)
+    title = re.sub(r"-{2,}", "-", title).strip("-")
 except Exception:
     title = ""
 
