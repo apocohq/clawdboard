@@ -319,6 +319,8 @@ public struct DetailRow: View {
 /// Unlike `NSCursor.push()`/`pop()` in `.onHover`, cursor rects are managed by
 /// AppKit's tracking system and handle nested views correctly.
 private class PointingHandCursorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     override func resetCursorRects() {
         discardCursorRects()
         addCursorRect(bounds, cursor: .pointingHand)
