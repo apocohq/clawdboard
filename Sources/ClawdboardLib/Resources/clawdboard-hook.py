@@ -352,7 +352,7 @@ try:
          claude_prompt, "--output-format", "text"],
         capture_output=True, text=True, timeout=30,
     )
-    raw = result.stdout.strip().lower().replace(" ", "-")[:40] if result.returncode == 0 else ""
+    raw = result.stdout.strip().lower().replace(" ", "-").replace("_", "-")[:40] if result.returncode == 0 else ""
     # Clean up: keep only alphanumeric and hyphens, collapse multiple hyphens
     title = re.sub(r"[^a-z0-9-]", "", raw)
     title = re.sub(r"-{2,}", "-", title).strip("-")
