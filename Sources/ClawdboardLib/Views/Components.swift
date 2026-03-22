@@ -88,6 +88,34 @@ public struct ContextBar: View {
     }
 }
 
+// MARK: - PR Status Icon
+
+/// Displays the pull request status for a session's branch.
+public struct PRStatusIcon: View {
+    public let prStatus: PRStatus?
+
+    public var body: some View {
+        Group {
+            switch prStatus {
+            case .some(.open):
+                Image(systemName: "arrow.triangle.pull")
+                    .foregroundStyle(.green)
+            case .some(.merged):
+                Image(systemName: "arrow.triangle.merge")
+                    .foregroundStyle(.purple)
+            case .some(.closed):
+                Image(systemName: "xmark.circle")
+                    .foregroundStyle(.secondary)
+            case .some(.none), nil:
+                Image(systemName: "circle")
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .font(.system(size: 12))
+        .frame(width: 16, alignment: .center)
+    }
+}
+
 // MARK: - Sparkline View
 
 /// Miniature activity chart showing context usage rate over a 30-minute window.

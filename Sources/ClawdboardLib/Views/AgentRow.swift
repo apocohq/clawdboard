@@ -103,10 +103,7 @@ public struct AgentRow: View {
                             snapshots: session.contextSnapshots ?? [],
                             approvalTimestamps: session.approvalTimestamps ?? []
                         )
-                        Text(session.formattedContext)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 30, alignment: .trailing)
+                        PRStatusIcon(prStatus: session.prStatus)
                     }
                     .fixedSize()
                 }

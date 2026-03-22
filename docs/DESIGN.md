@@ -147,9 +147,33 @@ Miniature line chart showing context usage over time per session.
 
 **Stroke color**: Uses the shared usage gauge color scale based on latest value (see Color System).
 
-**Collapsed placement**: Trailing edge of session row, between content and chevron, paired with context % text. Only shown for hook-tracked sessions with 2+ snapshots.
+**Collapsed placement**: Trailing edge of session row, between content and chevron, paired with PR status icon. Only shown for hook-tracked sessions with 2+ snapshots.
 
 **Expanded placement**: Inline with ContextBar in the details section, providing trend alongside current state.
+
+---
+
+### PRStatusIcon
+**File**: `Sources/ClawdboardLib/Views/Components.swift`
+
+Displays the pull request status for a session's branch. Fetched via `gh` CLI on the Swift side (`PRStatusProvider`), not from hooks.
+
+| Property | Value |
+|----------|-------|
+| Font | `.system(size: 12)` |
+| Frame width | 16pt, center-aligned |
+
+**States**:
+| Status | SF Symbol | Color |
+|--------|-----------|-------|
+| No PR / unknown | `circle` | `.tertiary` |
+| PR open | `arrow.triangle.pull` | `.green` |
+| PR merged | `arrow.triangle.merge` | `.purple` |
+| PR closed | `xmark.circle` | `.secondary` |
+
+**Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (empty circle when no PR data available).
+
+**Data source**: `PRStatusProvider` polls `gh pr list` with 30s per-session debounce. Requires `gh` CLI to be installed and authenticated.
 
 ---
 
@@ -197,7 +221,7 @@ Single session row. Full row is the primary click target (Fitts's Law).
 - **Right-click context menu** = Focus in iTerm2, Focus in VS Code/Cursor, Copy Session ID, Delete Session.
 - **Hover** = background brightens (0.5 → 0.8 opacity) + pointing hand cursor when a focus action is available.
 
-**Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Disclosure chevron
+**Layout**: `StatusDot` | Title + metadata (VStack) | Spacer | Sparkline + PRStatusIcon | Disclosure chevron
 
 **Title**: `.system(.body, weight: .medium)`. Single line, truncated. Shows AI-generated kebab-case slug title (e.g. `api-refactor`, `auth-module`, `docs-update`) when available, otherwise a placeholder slug like `new-session` (stable per session ID).
 

@@ -205,6 +205,16 @@ public struct ContextSnapshot: Codable, Equatable {
     public let pct: Double
 }
 
+// MARK: - PR Status
+
+/// Pull request status for a session's branch, fetched via `gh` CLI.
+public enum PRStatus: String, Codable, Equatable {
+    case none
+    case open
+    case merged
+    case closed
+}
+
 // MARK: - Agent Session
 
 /// Represents a Claude Code agent session.
@@ -260,6 +270,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// Timestamps when approval was requested (for sparkline markers)
     public var approvalTimestamps: [Date]?
 
+    /// PR status for this session's branch (fetched Swift-side via `gh` CLI, not persisted)
+    public var prStatus: PRStatus?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -283,6 +296,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case deletions
         case contextSnapshots = "context_snapshots"
         case approvalTimestamps = "approval_timestamps"
+        case prStatus = "pr_status"
     }
 
     public init(
@@ -307,7 +321,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         additions: Int? = nil,
         deletions: Int? = nil,
         contextSnapshots: [ContextSnapshot]? = nil,
-        approvalTimestamps: [Date]? = nil
+        approvalTimestamps: [Date]? = nil,
+        prStatus: PRStatus? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -331,6 +346,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.deletions = deletions
         self.contextSnapshots = contextSnapshots
         self.approvalTimestamps = approvalTimestamps
+        self.prStatus = prStatus
     }
 
     /// Display title: AI-generated slug title, or a placeholder while generating

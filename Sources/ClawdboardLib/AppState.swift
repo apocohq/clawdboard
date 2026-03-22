@@ -30,6 +30,7 @@ public class AppState {
     private var remoteWatcher: RemoteSessionWatcher?
     private var usageLimitsWatcher: UsageLimitsWatcher?
     private var diffStatsProvider: DiffStatsProvider?
+    private var prStatusProvider: PRStatusProvider?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -71,6 +72,7 @@ public class AppState {
         startRemoteWatcher()
         startUsageLimitsWatcher()
         startDiffStatsProvider()
+        startPRStatusProvider()
     }
 
     public func stop() {
@@ -81,6 +83,7 @@ public class AppState {
         usageLimitsWatcher?.stop()
         usageLimitsWatcher = nil
         diffStatsProvider = nil
+        prStatusProvider = nil
     }
 
     // MARK: - Remote Host Management
@@ -216,6 +219,39 @@ public class AppState {
         diffStatsProvider?.updateTargets(targets)
     }
 
+    // MARK: - PR Status Provider
+
+    private func startPRStatusProvider() {
+        guard prStatusProvider == nil else { return }
+        prStatusProvider = PRStatusProvider { [weak self] in
+            self?.mergePRStatus()
+        }
+    }
+
+    private func mergePRStatus() {
+        guard let provider = prStatusProvider else { return }
+        for i in sessions.indices {
+            if let status = provider.prStatusCache[sessions[i].sessionId] {
+                if sessions[i].prStatus != status {
+                    sessions[i].prStatus = status
+                }
+            }
+        }
+    }
+
+    private func refreshPRStatusProviderTargets() {
+        let targets = sessions.compactMap { session -> PRStatusProvider.PRStatusTarget? in
+            guard session.remoteHost == nil,
+                session.displayStatus != .abandoned,
+                let repo = session.githubRepo,
+                let branch = session.gitBranch
+            else { return nil }
+            return PRStatusProvider.PRStatusTarget(
+                sessionId: session.sessionId, githubRepo: repo, gitBranch: branch)
+        }
+        prStatusProvider?.updateTargets(targets)
+    }
+
     // MARK: - IDE Lock Files
 
     /// Scan ~/.claude/ide/*.lock for IDE window info.
@@ -315,8 +351,19 @@ public class AppState {
             }
         }
 
+        // Preserve PR status from previous cycle.
+        if let provider = prStatusProvider {
+            let cache = provider.prStatusCache
+            for i in all.indices {
+                if let status = cache[all[i].sessionId] {
+                    all[i].prStatus = status
+                }
+            }
+        }
+
         sessions = all
         refreshDiffStatsProviderTargets()
+        refreshPRStatusProviderTargets()
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()
