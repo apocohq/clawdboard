@@ -329,7 +329,7 @@ def write_state(state_file: Path, state: JsonDict) -> None:
 
 
 _TITLE_SCRIPT = """\
-import json, os, subprocess
+import json, os, re, subprocess
 from pathlib import Path
 
 state_file = Path(os.environ["_CLAWDBOARD_STATE_FILE"])
@@ -354,7 +354,6 @@ try:
     )
     raw = result.stdout.strip().lower().replace(" ", "-")[:40] if result.returncode == 0 else ""
     # Clean up: keep only alphanumeric and hyphens, collapse multiple hyphens
-    import re
     title = re.sub(r"[^a-z0-9-]", "", raw)
     title = re.sub(r"-{2,}", "-", title).strip("-")
 except Exception:
