@@ -173,7 +173,7 @@ Displays the pull request status for a session's branch. Fetched via `gh` CLI on
 
 **Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (empty circle when no PR data available).
 
-**Data source**: `PRStatusProvider` polls `gh pr list` with 30s per-session debounce. Requires `gh` CLI to be installed and authenticated.
+**Data source**: `PRStatusProvider` polls `gh pr list` with 30s per-session debounce. Requires `gh` CLI to be installed and authenticated. Cache persisted to `~/.clawdboard/pr-status-cache.json` for instant display on app launch.
 
 ---
 

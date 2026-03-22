@@ -5,11 +5,17 @@ import Foundation
 /// Triggered by `updateTargets()` (called when sessions change via `rebuildSessions()`).
 /// Uses a 30s per-session debounce since PR status changes infrequently.
 ///
-/// Results kept in memory — no state file writes, no rebuild loops.
+/// Persists cache to `~/.clawdboard/pr-status-cache.json` so PR status
+/// is available immediately on app launch without waiting for `gh` fetches.
 /// All `gh` commands run off the main thread on `.utility` QoS.
 public class PRStatusProvider {
     /// Minimum seconds between PR status checks for the same session.
     private static let prStatusDebounce: TimeInterval = 30
+
+    private static let cacheFile: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".clawdboard/pr-status-cache.json")
+    }()
 
     // MARK: - Callback
 
@@ -28,7 +34,7 @@ public class PRStatusProvider {
 
     private let queue = DispatchQueue(label: "clawdboard.pr-status-provider", qos: .utility)
 
-    // MARK: - In-memory cache
+    // MARK: - Cache (persisted to disk)
 
     /// Cached PR status keyed by session ID. Access only from `queue`.
     private var _prStatusCache: [String: PRStatus] = [:]
@@ -57,6 +63,7 @@ public class PRStatusProvider {
 
     public init(onChange: @escaping () -> Void) {
         self.onChange = onChange
+        loadCache()
     }
 
     /// Update session targets and trigger a debounced PR status refresh.
@@ -68,12 +75,29 @@ public class PRStatusProvider {
             // Clean up caches for sessions that are no longer active
             let activeIds = Set(newTargets.map(\.sessionId))
             self.lastFetch = self.lastFetch.filter { activeIds.contains($0.key) }
+            let cacheChanged = self._prStatusCache.keys.contains(where: { !activeIds.contains($0) })
             self._prStatusCache = self._prStatusCache.filter { activeIds.contains($0.key) }
+            if cacheChanged { self.saveCache() }
 
             let snapshot = self.targets
             guard !snapshot.isEmpty else { return }
             self.fetchAll(snapshot)
         }
+    }
+
+    // MARK: - Disk persistence
+
+    private func loadCache() {
+        guard let data = try? Data(contentsOf: Self.cacheFile),
+            let dict = try? JSONDecoder().decode([String: PRStatus].self, from: data)
+        else { return }
+        _prStatusCache = dict
+    }
+
+    /// Save cache to disk. Must be called from `queue`.
+    private func saveCache() {
+        guard let data = try? JSONEncoder().encode(_prStatusCache) else { return }
+        try? data.write(to: Self.cacheFile, options: .atomic)
     }
 
     // MARK: - PR status fetching
@@ -108,6 +132,7 @@ public class PRStatusProvider {
         }
 
         if anyChanged {
+            saveCache()
             DispatchQueue.main.async { [weak self] in
                 self?.onChange()
             }
