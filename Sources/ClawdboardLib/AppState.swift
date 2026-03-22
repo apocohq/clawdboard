@@ -241,8 +241,8 @@ public class AppState {
 
     private func refreshPRStatusProviderTargets() {
         let targets = sessions.compactMap { session -> PRStatusProvider.PRStatusTarget? in
+            // Unlike diff stats, PR status is useful even for idle sessions
             guard session.remoteHost == nil,
-                session.displayStatus != .abandoned,
                 let repo = session.githubRepo,
                 let branch = session.gitBranch
             else { return nil }
