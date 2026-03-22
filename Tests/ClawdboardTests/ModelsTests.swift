@@ -152,4 +152,62 @@ struct ModelsTests {
         let noStart = AgentSession(sessionId: "3", cwd: "/c", projectName: "c", isHookTracked: false)
         #expect(noStart.elapsedTime == "—")
     }
+
+    // MARK: - ContextSnapshot
+
+    @Test("ContextSnapshot decodes from JSON with short keys")
+    func contextSnapshotDecodes() throws {
+        let json = """
+            {"t": "2026-03-22T10:30:05Z", "pct": 42.5}
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(
+            ContextSnapshot.self, from: json.data(using: .utf8)!  // swiftlint:disable:this force_unwrapping
+        )
+        #expect(snapshot.pct == 42.5)
+    }
+
+    @Test("AgentSession decodes with context_snapshots")
+    func sessionWithSnapshots() throws {
+        let json = """
+            {
+                "session_id": "s1",
+                "cwd": "/tmp",
+                "project_name": "test",
+                "status": "working",
+                "is_hook_tracked": true,
+                "context_snapshots": [
+                    {"t": "2026-03-22T10:00:00Z", "pct": 10.0},
+                    {"t": "2026-03-22T10:05:00Z", "pct": 25.3}
+                ]
+            }
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(
+            AgentSession.self, from: json.data(using: .utf8)!  // swiftlint:disable:this force_unwrapping
+        )
+        #expect(session.contextSnapshots?.count == 2)
+        #expect(session.contextSnapshots?.last?.pct == 25.3)
+    }
+
+    @Test("AgentSession decodes without context_snapshots (backward compat)")
+    func sessionWithoutSnapshots() throws {
+        let json = """
+            {
+                "session_id": "s2",
+                "cwd": "/tmp",
+                "project_name": "test",
+                "status": "working",
+                "is_hook_tracked": false
+            }
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let session = try decoder.decode(
+            AgentSession.self, from: json.data(using: .utf8)!  // swiftlint:disable:this force_unwrapping
+        )
+        #expect(session.contextSnapshots == nil)
+    }
 }

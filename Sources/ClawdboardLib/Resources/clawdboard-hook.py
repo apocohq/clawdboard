@@ -395,6 +395,17 @@ def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
             state[key] = val
 
 
+MAX_CONTEXT_SNAPSHOTS = 100
+
+
+def append_context_snapshot(state: JsonDict, pct: float, timestamp: str) -> None:
+    snapshots = state.get("context_snapshots", [])
+    snapshots.append({"t": timestamp, "pct": pct})
+    if len(snapshots) > MAX_CONTEXT_SNAPSHOTS:
+        snapshots = snapshots[-MAX_CONTEXT_SNAPSHOTS:]
+    state["context_snapshots"] = snapshots
+
+
 def make_base_state(
     session_id: str, cwd: str, project_name: str, now: str, claude_pid: int
 ) -> JsonDict:
@@ -442,6 +453,8 @@ def handle_session_start(
         "pid": claude_pid,
         "is_hook_tracked": True,
     }
+    if data.get("context_pct") is not None:
+        append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
 
 
@@ -466,6 +479,8 @@ def handle_post_tool_use(
     # Then read transcript data and write again with full info
     data = read_transcript_data(transcript_path, state_file)
     merge_transcript_data(state, data)
+    if data.get("context_pct") is not None:
+        append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
 
 
@@ -477,6 +492,8 @@ def handle_stop(state_file: Path, transcript_path: str, now: str) -> None:
     state["status"] = "pending_waiting"
     state["updated_at"] = now
     merge_transcript_data(state, data)
+    if data.get("context_pct") is not None:
+        append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
 
 
@@ -520,11 +537,15 @@ def handle_user_prompt_submit(
         if not state.get("title"):
             state["title"] = random.choice(TITLE_PLACEHOLDERS)
         merge_transcript_data(state, data)
+        if data.get("context_pct") is not None:
+            append_context_snapshot(state, data["context_pct"], now)
         write_state(state_file, state)
         generate_title_async(state_file, prompts)
         return
 
     merge_transcript_data(state, data)
+    if data.get("context_pct") is not None:
+        append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
 
 
@@ -544,6 +565,9 @@ def handle_notification(state_file: Path, notification_subtype: str, now: str) -
         return
     if notification_subtype == "permission_prompt":
         state["status"] = "needs_approval"
+        approvals = state.get("approval_timestamps", [])
+        approvals.append(now)
+        state["approval_timestamps"] = approvals
     else:
         # idle_prompt is async and can arrive after UserPromptSubmit has
         # already set the session back to "working". Never clobber working.
@@ -561,6 +585,9 @@ def handle_permission_request(state_file: Path, now: str) -> None:
     if state is None:
         return
     state["status"] = "needs_approval"
+    approvals = state.get("approval_timestamps", [])
+    approvals.append(now)
+    state["approval_timestamps"] = approvals
     state["updated_at"] = now
     write_state(state_file, state)
 

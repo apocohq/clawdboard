@@ -197,6 +197,14 @@ public struct Subagent: Codable, Equatable, Identifiable {
     }
 }
 
+// MARK: - Context Snapshot
+
+/// A timestamped context usage snapshot for sparkline rendering.
+public struct ContextSnapshot: Codable, Equatable {
+    public let t: Date
+    public let pct: Double
+}
+
 // MARK: - Agent Session
 
 /// Represents a Claude Code agent session.
@@ -246,6 +254,12 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// Lines deleted relative to default branch (from git diff --shortstat)
     public var deletions: Int?
 
+    /// Timestamped context usage snapshots for sparkline display (last ~100 entries)
+    public var contextSnapshots: [ContextSnapshot]?
+
+    /// Timestamps when approval was requested (for sparkline markers)
+    public var approvalTimestamps: [Date]?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -267,6 +281,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case firstPrompt = "first_prompt"
         case additions
         case deletions
+        case contextSnapshots = "context_snapshots"
+        case approvalTimestamps = "approval_timestamps"
     }
 
     public init(
@@ -289,7 +305,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         title: String? = nil,
         firstPrompt: String? = nil,
         additions: Int? = nil,
-        deletions: Int? = nil
+        deletions: Int? = nil,
+        contextSnapshots: [ContextSnapshot]? = nil,
+        approvalTimestamps: [Date]? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -311,6 +329,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.firstPrompt = firstPrompt
         self.additions = additions
         self.deletions = deletions
+        self.contextSnapshots = contextSnapshots
+        self.approvalTimestamps = approvalTimestamps
     }
 
     /// Display title: AI-generated slug title, or a placeholder while generating
