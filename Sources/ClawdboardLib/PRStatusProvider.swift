@@ -5,11 +5,11 @@ import Foundation
 /// Triggered by `updateTargets()` (called when sessions change via `rebuildSessions()`).
 /// Uses a 30s per-session debounce since PR status changes infrequently.
 ///
-/// Persists cache to `~/.clawdboard/pr-status-cache.json` so PR status
-/// is available immediately on app launch without waiting for `gh` fetches.
+/// Persists cache to `~/.clawdboard/pr-status-cache.json` keyed by `repo:branch`
+/// so PR status survives app restarts and is shared across sessions on the same branch.
 /// All `gh` commands run off the main thread on `.utility` QoS.
 public class PRStatusProvider {
-    /// Minimum seconds between PR status checks for the same session.
+    /// Minimum seconds between PR status checks for the same repo:branch.
     private static let prStatusDebounce: TimeInterval = 30
 
     private static let cacheFile: URL = {
@@ -28,6 +28,9 @@ public class PRStatusProvider {
         public let sessionId: String
         public let githubRepo: String
         public let gitBranch: String
+
+        /// Stable cache key independent of session ID.
+        var cacheKey: String { "\(githubRepo):\(gitBranch)" }
     }
 
     // MARK: - Serial queue protecting all mutable state
@@ -36,19 +39,23 @@ public class PRStatusProvider {
 
     // MARK: - Cache (persisted to disk)
 
-    /// Cached PR status keyed by session ID. Access only from `queue`.
-    private var _prStatusCache: [String: PRStatus] = [:]
+    /// Cached PR status keyed by `repo:branch`. Access only from `queue`.
+    private var _diskCache: [String: PRStatus] = [:]
 
-    /// Thread-safe snapshot of PR status cache.
+    /// Resolved PR status keyed by session ID (derived from _diskCache + targets).
+    /// Access only from `queue`.
+    private var _sessionCache: [String: PRStatus] = [:]
+
+    /// Thread-safe snapshot of PR status cache keyed by session ID.
     public var prStatusCache: [String: PRStatus] {
-        queue.sync { _prStatusCache }
+        queue.sync { _sessionCache }
     }
 
     // MARK: - Session tracking
 
     private var targets: [PRStatusTarget] = []
 
-    /// Tracks when PR status was last fetched per session (for debounce).
+    /// Tracks when PR status was last fetched per repo:branch (for debounce).
     private var lastFetch: [String: Date] = [:]
 
     /// Whether `gh` CLI is available. Checked once on first fetch.
@@ -63,7 +70,7 @@ public class PRStatusProvider {
 
     public init(onChange: @escaping () -> Void) {
         self.onChange = onChange
-        loadCache()
+        queue.sync { loadCache() }
     }
 
     /// Update session targets and trigger a debounced PR status refresh.
@@ -72,12 +79,12 @@ public class PRStatusProvider {
             guard let self else { return }
             self.targets = newTargets
 
-            // Clean up caches for sessions that are no longer active
-            let activeIds = Set(newTargets.map(\.sessionId))
-            self.lastFetch = self.lastFetch.filter { activeIds.contains($0.key) }
-            let cacheChanged = self._prStatusCache.keys.contains(where: { !activeIds.contains($0) })
-            self._prStatusCache = self._prStatusCache.filter { activeIds.contains($0.key) }
-            if cacheChanged { self.saveCache() }
+            // Clean up debounce tracking for repo:branches no longer active
+            let activeCacheKeys = Set(newTargets.map(\.cacheKey))
+            self.lastFetch = self.lastFetch.filter { activeCacheKeys.contains($0.key) }
+
+            // Rebuild session cache from disk cache + current targets
+            self.rebuildSessionCache()
 
             let snapshot = self.targets
             guard !snapshot.isEmpty else { return }
@@ -87,17 +94,30 @@ public class PRStatusProvider {
 
     // MARK: - Disk persistence
 
+    /// Load disk cache. Must be called from `queue`.
     private func loadCache() {
         guard let data = try? Data(contentsOf: Self.cacheFile),
             let dict = try? JSONDecoder().decode([String: PRStatus].self, from: data)
         else { return }
-        _prStatusCache = dict
+        _diskCache = dict
     }
 
-    /// Save cache to disk. Must be called from `queue`.
+    /// Save disk cache. Must be called from `queue`.
     private func saveCache() {
-        guard let data = try? JSONEncoder().encode(_prStatusCache) else { return }
+        guard let data = try? JSONEncoder().encode(_diskCache) else { return }
         try? data.write(to: Self.cacheFile, options: .atomic)
+    }
+
+    /// Rebuild session ID → PRStatus mapping from disk cache + current targets.
+    /// Must be called from `queue`.
+    private func rebuildSessionCache() {
+        var sessionCache: [String: PRStatus] = [:]
+        for target in targets {
+            if let status = _diskCache[target.cacheKey] {
+                sessionCache[target.sessionId] = status
+            }
+        }
+        _sessionCache = sessionCache
     }
 
     // MARK: - PR status fetching
@@ -112,9 +132,14 @@ public class PRStatusProvider {
         let now = Date()
         var anyChanged = false
 
+        // Deduplicate by cache key — multiple sessions may share the same repo:branch
+        var seen = Set<String>()
         for target in targets {
+            let key = target.cacheKey
+            guard seen.insert(key).inserted else { continue }
+
             // Debounce: skip if fetched recently
-            if let last = lastFetch[target.sessionId],
+            if let last = lastFetch[key],
                 now.timeIntervalSince(last) < Self.prStatusDebounce
             {
                 continue
@@ -123,15 +148,16 @@ public class PRStatusProvider {
             guard let status = fetchPRStatus(repo: target.githubRepo, branch: target.gitBranch)
             else { continue }
 
-            lastFetch[target.sessionId] = now
+            lastFetch[key] = now
 
-            if _prStatusCache[target.sessionId] != status {
-                _prStatusCache[target.sessionId] = status
+            if _diskCache[key] != status {
+                _diskCache[key] = status
                 anyChanged = true
             }
         }
 
         if anyChanged {
+            rebuildSessionCache()
             saveCache()
             DispatchQueue.main.async { [weak self] in
                 self?.onChange()
