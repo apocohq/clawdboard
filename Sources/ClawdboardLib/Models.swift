@@ -313,28 +313,21 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.deletions = deletions
     }
 
-    /// Display title: AI-generated title, or a fun placeholder while generating
+    /// Display title: AI-generated slug title, or a placeholder while generating
     public var displayTitle: String {
         if let title = title {
             return title
         }
         // Stable random placeholder seeded from session ID
         let placeholders = [
-            "Thinking really hard...",
-            "Consulting the oracle...",
-            "Summoning creativity...",
-            "Herding electrons...",
-            "Asking the magic 8-ball...",
-            "Warming up the hamsters...",
-            "Reticulating splines...",
-            "Brewing a title...",
-            "Hold my tokens...",
-            "Crunching vibes...",
-            "Tickling the transformer...",
-            "Polishing pixels...",
-            "Wrangling words...",
-            "Spinning up the flux capacitor...",
-            "Petting the neural cat...",
+            "new-session",
+            "getting-started",
+            "loading...",
+            "spinning-up",
+            "warming-up",
+            "initializing",
+            "booting-up",
+            "revving-up",
         ]
         let index = abs(sessionId.hashValue) % placeholders.count
         return placeholders[index]
