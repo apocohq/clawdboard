@@ -39,16 +39,22 @@ public class PRStatusProvider {
 
     // MARK: - Cache (persisted to disk)
 
-    /// Cached PR status keyed by `repo:branch`. Access only from `queue`.
-    private var _diskCache: [String: PRStatus] = [:]
+    /// Cached PR info keyed by `repo:branch`. Access only from `queue`.
+    private var _diskCache: [String: PRInfo] = [:]
 
-    /// Resolved PR status keyed by session ID (derived from _diskCache + targets).
+    /// Resolved PR info keyed by session ID (derived from _diskCache + targets).
     /// Access only from `queue`.
-    private var _sessionCache: [String: PRStatus] = [:]
+    private var _sessionCache: [String: PRInfo] = [:]
 
-    /// Thread-safe snapshot of PR status cache keyed by session ID.
-    public var prStatusCache: [String: PRStatus] {
+    /// Thread-safe snapshot of PR info cache keyed by session ID.
+    public var prInfoCache: [String: PRInfo] {
         queue.sync { _sessionCache }
+    }
+
+    /// Look up PR info from disk cache by repo:branch (bypasses session mapping).
+    /// Useful for immediate cache hits before `updateTargets` has run.
+    public func cachedInfo(repo: String, branch: String) -> PRInfo? {
+        queue.sync { _diskCache["\(repo):\(branch)"] }
     }
 
     // MARK: - Session tracking
@@ -97,7 +103,7 @@ public class PRStatusProvider {
     /// Load disk cache. Must be called from `queue`.
     private func loadCache() {
         guard let data = try? Data(contentsOf: Self.cacheFile),
-            let dict = try? JSONDecoder().decode([String: PRStatus].self, from: data)
+            let dict = try? JSONDecoder().decode([String: PRInfo].self, from: data)
         else { return }
         _diskCache = dict
     }
@@ -108,13 +114,13 @@ public class PRStatusProvider {
         try? data.write(to: Self.cacheFile, options: .atomic)
     }
 
-    /// Rebuild session ID → PRStatus mapping from disk cache + current targets.
+    /// Rebuild session ID → PRInfo mapping from disk cache + current targets.
     /// Must be called from `queue`.
     private func rebuildSessionCache() {
-        var sessionCache: [String: PRStatus] = [:]
+        var sessionCache: [String: PRInfo] = [:]
         for target in targets {
-            if let status = _diskCache[target.cacheKey] {
-                sessionCache[target.sessionId] = status
+            if let info = _diskCache[target.cacheKey] {
+                sessionCache[target.sessionId] = info
             }
         }
         _sessionCache = sessionCache
@@ -145,13 +151,13 @@ public class PRStatusProvider {
                 continue
             }
 
-            guard let status = fetchPRStatus(repo: target.githubRepo, branch: target.gitBranch)
+            guard let info = fetchPRInfo(repo: target.githubRepo, branch: target.gitBranch)
             else { continue }
 
             lastFetch[key] = now
 
-            if _diskCache[key] != status {
-                _diskCache[key] = status
+            if _diskCache[key] != info {
+                _diskCache[key] = info
                 anyChanged = true
             }
         }
@@ -192,8 +198,8 @@ public class PRStatusProvider {
         return path
     }
 
-    /// Run `gh pr list --head <branch> --repo <repo> --json state --limit 1`.
-    private func fetchPRStatus(repo: String, branch: String) -> PRStatus? {
+    /// Run `gh pr list --head <branch> --repo <repo> --json state,url --limit 1`.
+    private func fetchPRInfo(repo: String, branch: String) -> PRInfo? {
         guard let gh = resolveGhPath() else { return nil }
 
         let process = Process()
@@ -202,7 +208,7 @@ public class PRStatusProvider {
             "pr", "list",
             "--head", branch,
             "--repo", repo,
-            "--json", "state",
+            "--json", "state,url",
             "--limit", "1",
             "--state", "all",
         ]
@@ -225,18 +231,20 @@ public class PRStatusProvider {
         else { return nil }
 
         guard let first = json.first, let state = first["state"] as? String else {
-            return .none
+            return PRInfo(status: .none)
         }
+
+        let prUrl = first["url"] as? String
 
         switch state {
         case "OPEN":
-            return .open
+            return PRInfo(status: .open, url: prUrl)
         case "MERGED":
-            return .merged
+            return PRInfo(status: .merged, url: prUrl)
         case "CLOSED":
-            return .closed
+            return PRInfo(status: .closed, url: prUrl)
         default:
-            return .none
+            return PRInfo(status: .none)
         }
     }
 }

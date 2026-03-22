@@ -63,6 +63,9 @@ public class AppState {
     // MARK: - Lifecycle
 
     public func start() {
+        startDiffStatsProvider()
+        startPRStatusProvider()
+
         stateWatcher = SessionStateWatcher { [weak self] hookSessions in
             self?.localSessions = hookSessions
             self?.rebuildSessions()
@@ -71,8 +74,6 @@ public class AppState {
 
         startRemoteWatcher()
         startUsageLimitsWatcher()
-        startDiffStatsProvider()
-        startPRStatusProvider()
     }
 
     public func stop() {
@@ -231,9 +232,9 @@ public class AppState {
     private func mergePRStatus() {
         guard let provider = prStatusProvider else { return }
         for i in sessions.indices {
-            if let status = provider.prStatusCache[sessions[i].sessionId] {
-                if sessions[i].prStatus != status {
-                    sessions[i].prStatus = status
+            if let info = provider.prInfoCache[sessions[i].sessionId] {
+                if sessions[i].prInfo != info {
+                    sessions[i].prInfo = info
                 }
             }
         }
@@ -351,12 +352,17 @@ public class AppState {
             }
         }
 
-        // Preserve PR status from previous cycle.
+        // Preserve PR info from previous cycle or disk cache.
         if let provider = prStatusProvider {
-            let cache = provider.prStatusCache
+            let sessionCache = provider.prInfoCache
             for i in all.indices {
-                if let status = cache[all[i].sessionId] {
-                    all[i].prStatus = status
+                if let info = sessionCache[all[i].sessionId] {
+                    all[i].prInfo = info
+                } else if let repo = all[i].githubRepo,
+                    let branch = all[i].gitBranch,
+                    let info = provider.cachedInfo(repo: repo, branch: branch)
+                {
+                    all[i].prInfo = info
                 }
             }
         }

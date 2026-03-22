@@ -172,10 +172,10 @@ public enum AgentStatus: String, Codable, CaseIterable {
         switch self {
         case .working: return "Working"
         case .pendingWaiting: return "Working"  // Show as working until debounce completes
-        case .needsApproval: return "Approval"
+        case .needsApproval: return "Approve"
         case .waiting: return "Your turn"
         case .unknown: return "Unknown"
-        case .abandoned: return "Idle"
+        case .abandoned: return "Inactive"
         }
     }
 }
@@ -213,6 +213,17 @@ public enum PRStatus: String, Codable, Equatable {
     case open
     case merged
     case closed
+}
+
+/// PR status paired with the actual PR URL.
+public struct PRInfo: Codable, Equatable {
+    public let status: PRStatus
+    public let url: String?
+
+    public init(status: PRStatus, url: String? = nil) {
+        self.status = status
+        self.url = url
+    }
 }
 
 // MARK: - Agent Session
@@ -271,7 +282,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     public var approvalTimestamps: [Date]?
 
     /// PR status for this session's branch (fetched Swift-side via `gh` CLI, not persisted)
-    public var prStatus: PRStatus?
+    public var prInfo: PRInfo?
 
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
@@ -296,7 +307,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case deletions
         case contextSnapshots = "context_snapshots"
         case approvalTimestamps = "approval_timestamps"
-        case prStatus = "pr_status"
+        case prInfo = "pr_info"
     }
 
     public init(
@@ -322,7 +333,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         deletions: Int? = nil,
         contextSnapshots: [ContextSnapshot]? = nil,
         approvalTimestamps: [Date]? = nil,
-        prStatus: PRStatus? = nil
+        prInfo: PRInfo? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -346,7 +357,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.deletions = deletions
         self.contextSnapshots = contextSnapshots
         self.approvalTimestamps = approvalTimestamps
-        self.prStatus = prStatus
+        self.prInfo = prInfo
     }
 
     /// Display title: AI-generated slug title, or a placeholder while generating
