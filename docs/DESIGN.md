@@ -137,8 +137,7 @@ Miniature line chart showing context usage over time per session.
 
 | Property | Value |
 |----------|-------|
-| Collapsed size | 130 x 24pt |
-| Expanded size | 120 x 20pt |
+| Size | 130 x 24pt |
 | Stroke width | 1pt |
 | Fill opacity | 15% under line |
 | Min data points | 2 snapshots to render |
@@ -147,9 +146,7 @@ Miniature line chart showing context usage over time per session.
 
 **Stroke color**: Uses the shared usage gauge color scale based on latest value (see Color System).
 
-**Collapsed placement**: Trailing edge of session row, between content and chevron, paired with PR status icon. Only shown for hook-tracked sessions with 2+ snapshots.
-
-**Expanded placement**: Inline with ContextBar in the details section, providing trend alongside current state.
+**Placement**: Trailing edge of session row, between content and chevron, paired with PR status icon. Only shown for hook-tracked sessions with 2+ snapshots.
 
 ---
 
