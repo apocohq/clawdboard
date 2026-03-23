@@ -26,7 +26,7 @@ All colors are semantic SwiftUI values — they adapt automatically to light/dar
 | Inactive (abandoned) | `.gray` at 40% opacity | StatusDot |
 | Unknown | `.gray` | StatusDot |
 
-> **Accessibility**: Red and green are indistinguishable for ~8% of men with color vision deficiency. The critical approve/"your turn" distinction does not rely on color alone — approve is the only pulsing state, and the text label in the metadata line provides a third signal. Do not add pulsing to other states without providing an alternative non-color differentiator.
+> **Accessibility**: Red and green are indistinguishable for ~8% of men with color vision deficiency. The critical approve/"your turn" distinction does not rely on color alone — the text label in the metadata line provides a secondary signal.
 
 ### Usage Gauge Colors
 
@@ -90,7 +90,7 @@ Colored circle indicating session status.
 | Size | 8×8pt |
 | Shape | Filled `Circle()` |
 
-Colors follow the Status Colors table. Only approval status pulses (opacity 1.0↔0.4, 1s ease-in-out, repeats forever) — reserving the animation as an attention signal for user action required. All other states are static.
+Colors follow the Status Colors table. All states are static (no animations).
 
 ---
 
@@ -397,7 +397,6 @@ Shown when no sessions exist.
 
 | Animation | Duration | Curve | Details |
 |-----------|----------|-------|---------|
-| StatusDot pulse | 1.0s | ease-in-out | Opacity 1.0↔0.4, repeats forever. Active for approval only. |
 | Row hover | 0.1s | ease-in-out | Background opacity 0.5↔0.8, bound to `isHovered` state |
 | Row expand/collapse | 0.15s | ease-in-out | Bound to `isExpanded` state |
 | Group collapse/expand | 0.15s | ease-in-out | Bound to `collapsedGroups` state |
