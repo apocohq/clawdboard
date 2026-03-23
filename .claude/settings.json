@@ -1,0 +1,29 @@
+{
+  "allowedTools": [
+    "Bash(mise run build*)",
+    "Bash(mise run test*)",
+    "Bash(mise run lint*)",
+    "Bash(mise run format*)",
+    "Bash(mise run setup*)",
+    "Bash(mise run dev*)",
+    "Bash(mise run run*)",
+    "Bash(swift build*)",
+    "Bash(swift test*)",
+    "Bash(swift format*)",
+    "Bash(git status*)",
+    "Bash(git diff*)",
+    "Bash(git log*)",
+    "Bash(git fetch*)",
+    "Bash(git branch*)",
+    "Bash(git checkout -b *)",
+    "Bash(git stash*)",
+    "Bash(git add *)",
+    "Bash(git commit *)",
+    "Bash(gh issue view*)",
+    "Bash(gh issue list*)",
+    "Bash(gh pr view*)",
+    "Bash(gh pr list*)",
+    "Bash(gh pr create*)",
+    "Bash(gh issue create*)"
+  ]
+}
