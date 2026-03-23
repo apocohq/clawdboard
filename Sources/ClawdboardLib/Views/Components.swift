@@ -18,10 +18,9 @@ extension AgentStatus {
 
 // MARK: - Status Dot
 
-/// Colored circle indicating session status. Pulses when working.
+/// Colored circle indicating session status.
 public struct StatusDot: View {
     public let status: AgentStatus
-    @State private var isPulsing = false
 
     public init(status: AgentStatus) {
         self.status = status
@@ -29,29 +28,8 @@ public struct StatusDot: View {
 
     public var body: some View {
         Circle()
-            .fill(color)
+            .fill(status.displayColor)
             .frame(width: 8, height: 8)
-            .opacity(isPulsing ? 0.4 : 1.0)
-            .animation(
-                shouldPulse
-                    ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true)
-                    : .default,
-                value: isPulsing
-            )
-            .onAppear {
-                isPulsing = shouldPulse
-            }
-            .onChange(of: status) { _, _ in
-                isPulsing = shouldPulse
-            }
-    }
-
-    private var shouldPulse: Bool {
-        status == .needsApproval
-    }
-
-    private var color: Color {
-        status.displayColor
     }
 }
 
