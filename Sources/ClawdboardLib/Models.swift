@@ -269,6 +269,18 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// The first user prompt, used as a fallback label
     public var firstPrompt: String?
 
+    /// Git SHA at session start (for commit count comparison)
+    public var startSha: String?
+
+    /// Current HEAD SHA (updated on each hook event)
+    public var headSha: String?
+
+    /// Number of commits made since session start
+    public var commitCount: Int?
+
+    /// Number of commits ahead of upstream (nil = no upstream)
+    public var unpushedCount: Int?
+
     /// Lines added relative to default branch (from git diff --shortstat)
     public var additions: Int?
 
@@ -303,6 +315,10 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case iterm2SessionId = "iterm2_session_id"
         case title
         case firstPrompt = "first_prompt"
+        case startSha = "start_sha"
+        case headSha = "head_sha"
+        case commitCount = "commit_count"
+        case unpushedCount = "unpushed_count"
         case additions
         case deletions
         case contextSnapshots = "context_snapshots"
@@ -329,6 +345,10 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         iterm2SessionId: String? = nil,
         title: String? = nil,
         firstPrompt: String? = nil,
+        startSha: String? = nil,
+        headSha: String? = nil,
+        commitCount: Int? = nil,
+        unpushedCount: Int? = nil,
         additions: Int? = nil,
         deletions: Int? = nil,
         contextSnapshots: [ContextSnapshot]? = nil,
@@ -353,6 +373,10 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.iterm2SessionId = iterm2SessionId
         self.title = title
         self.firstPrompt = firstPrompt
+        self.startSha = startSha
+        self.headSha = headSha
+        self.commitCount = commitCount
+        self.unpushedCount = unpushedCount
         self.additions = additions
         self.deletions = deletions
         self.contextSnapshots = contextSnapshots
@@ -422,6 +446,26 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         if add > 0 { parts.append("+\(add)") }
         if del > 0 { parts.append("−\(del)") }
         return parts.joined(separator: " ")
+    }
+
+    /// Whether commits were made during this session
+    public var hasSessionCommits: Bool {
+        (commitCount ?? 0) > 0
+    }
+
+    /// Whether all session commits have been pushed (false if no upstream)
+    public var allCommitsPushed: Bool {
+        unpushedCount == 0
+    }
+
+    /// GitHub compare URL for session commits (start_sha...head_sha)
+    public var commitCompareUrl: String? {
+        guard let repo = githubRepo,
+            let start = startSha,
+            let head = headSha,
+            start != head
+        else { return nil }
+        return "https://github.com/\(repo)/compare/\(start)...\(head)"
     }
 
     /// GitHub compare URL for this branch — opens the existing PR if one exists,

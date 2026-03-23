@@ -167,6 +167,75 @@ def get_github_repo(cwd: str) -> str | None:
         return None
 
 
+def get_git_head_sha(cwd: str) -> str | None:
+    """Return the full HEAD commit SHA for the given directory, or None."""
+    if not cwd:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return None
+        sha = result.stdout.strip()
+        return sha if len(sha) == 40 else None
+    except Exception:
+        return None
+
+
+def get_commit_count(cwd: str, start_sha: str) -> int:
+    """Return the number of commits between start_sha and HEAD (exclusive..inclusive)."""
+    if not cwd or not start_sha:
+        return 0
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"{start_sha}..HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return 0
+        return int(result.stdout.strip())
+    except Exception:
+        return 0
+
+
+def get_unpushed_count(cwd: str) -> int | None:
+    """Return the number of commits ahead of upstream, or None if no upstream."""
+    if not cwd:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", "@{upstream}..HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return None
+        return int(result.stdout.strip())
+    except Exception:
+        return None
+
+
+def update_commit_tracking(state: JsonDict, cwd: str) -> None:
+    """Update head_sha, commit_count, and unpushed_count from the current git state."""
+    head = get_git_head_sha(cwd)
+    if head:
+        state["head_sha"] = head
+    start = state.get("start_sha")
+    if start and head:
+        state["commit_count"] = get_commit_count(cwd, start)
+    state["unpushed_count"] = get_unpushed_count(cwd)
+
+
 def main() -> None:
     notification_subtype = sys.argv[1] if len(sys.argv) > 1 else ""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -194,7 +263,9 @@ def main() -> None:
     # Debug logging
     subtype_suffix = f":{notification_subtype}" if notification_subtype else ""
     with open(LOG_FILE, "a") as lf:
-        lf.write(f"[{now}] {hook_event}{subtype_suffix} session={session_id} cwd={cwd}\n")
+        lf.write(
+            f"[{now}] {hook_event}{subtype_suffix} session={session_id} cwd={cwd}\n"
+        )
 
     if hook_event == "SessionStart":
         handle_session_start(
@@ -329,7 +400,7 @@ def write_state(state_file: Path, state: JsonDict) -> None:
 
 
 _TITLE_SCRIPT = """\
-import json, os, re, subprocess
+import json, os, re, signal, subprocess
 from pathlib import Path
 
 state_file = Path(os.environ["_CLAWDBOARD_STATE_FILE"])
@@ -346,18 +417,34 @@ claude_prompt = (
     + prompt_text
 )
 
+title = ""
 try:
-    result = subprocess.run(
-        ["claude", "-p", "--no-session-persistence",
-         claude_prompt, "--output-format", "text"],
-        capture_output=True, text=True, timeout=30,
+    proc = subprocess.Popen(
+        ["claude", "-p", "--model", "haiku", "--no-session-persistence",
+         claude_prompt, "--output-format", "text",
+         "--max-budget-usd", "0.01"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL, text=True,
+        start_new_session=True,
     )
-    raw = result.stdout.strip().lower().replace(" ", "-").replace("_", "-")[:40] if result.returncode == 0 else ""
-    # Clean up: keep only alphanumeric and hyphens, collapse multiple hyphens
-    title = re.sub(r"[^a-z0-9-]", "", raw)
-    title = re.sub(r"-{2,}", "-", title).strip("-")
+    try:
+        stdout, _ = proc.communicate(timeout=15)
+        if proc.returncode == 0 and stdout:
+            raw = stdout.strip().lower().replace(" ", "-").replace("_", "-")[:40]
+            title = re.sub(r"[^a-z0-9-]", "", raw)
+            title = re.sub(r"-{2,}", "-", title).strip("-")
+    except subprocess.TimeoutExpired:
+        # Kill the entire process group to avoid orphaned children
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
 except Exception:
-    title = ""
+    pass
 
 try:
     state = json.loads(state_file.read_text())
@@ -395,9 +482,7 @@ def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
             state[key] = val
 
 
-def _reapply_git_info(
-    state: JsonDict, branch: str | None, repo: str | None
-) -> None:
+def _reapply_git_info(state: JsonDict, branch: str | None, repo: str | None) -> None:
     """Re-apply git-detected values after merge_transcript_data which may clobber them
     with stale transcript metadata (set at session start, never updated on cwd change)."""
     if branch:
@@ -449,6 +534,7 @@ def handle_session_start(
     data = read_transcript_data(
         transcript_path, Path("/dev/null")
     )  # no prev state for new session
+    head_sha = get_git_head_sha(cwd)
     state = {
         "session_id": session_id,
         "cwd": cwd,
@@ -463,6 +549,10 @@ def handle_session_start(
         "updated_at": now,
         "pid": claude_pid,
         "is_hook_tracked": True,
+        "start_sha": head_sha,
+        "head_sha": head_sha,
+        "commit_count": 0,
+        "unpushed_count": get_unpushed_count(cwd),
     }
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
@@ -490,6 +580,12 @@ def handle_post_tool_use(
         new_repo = get_github_repo(cwd)
         state["git_branch"] = new_branch
         state["github_repo"] = new_repo
+        # Reset start_sha when repo changes
+        head_sha = get_git_head_sha(cwd)
+        state["start_sha"] = head_sha
+        state["head_sha"] = head_sha
+        state["commit_count"] = 0
+        state["unpushed_count"] = get_unpushed_count(cwd)
 
     # Write "working" immediately so the UI updates before the slow transcript read
     state["status"] = "working"
@@ -503,6 +599,7 @@ def handle_post_tool_use(
         _reapply_git_info(state, new_branch, new_repo)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
+    update_commit_tracking(state, cwd or state.get("cwd", ""))
     write_state(state_file, state)
 
 
@@ -542,6 +639,12 @@ def handle_user_prompt_submit(
         new_repo = get_github_repo(cwd)
         state["git_branch"] = new_branch
         state["github_repo"] = new_repo
+        # Reset start_sha when repo changes
+        head_sha = get_git_head_sha(cwd)
+        state["start_sha"] = head_sha
+        state["head_sha"] = head_sha
+        state["commit_count"] = 0
+        state["unpushed_count"] = get_unpushed_count(cwd)
 
     state["status"] = "working"
     state["updated_at"] = now
@@ -573,6 +676,7 @@ def handle_user_prompt_submit(
             _reapply_git_info(state, new_branch, new_repo)
         if data.get("context_pct") is not None:
             append_context_snapshot(state, data["context_pct"], now)
+        update_commit_tracking(state, cwd or state.get("cwd", ""))
         write_state(state_file, state)
         generate_title_async(state_file, prompts)
         return
@@ -582,6 +686,7 @@ def handle_user_prompt_submit(
         _reapply_git_info(state, new_branch, new_repo)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
+    update_commit_tracking(state, cwd or state.get("cwd", ""))
     write_state(state_file, state)
 
 
