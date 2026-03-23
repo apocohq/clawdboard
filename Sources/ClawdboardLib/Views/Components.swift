@@ -127,11 +127,7 @@ public struct PRStatusIcon: View {
 
     /// Minimum badge width — wider for commit count text
     private var badgeWidth: CGFloat {
-        if showCommitBadge {
-            let count = commitCount ?? 0
-            if count >= 10 { return 30 }
-            return Self.badgeSize
-        }
+        if showCommitBadge && (commitCount ?? 0) >= 10 { return 30 }
         return Self.badgeSize
     }
 
@@ -215,9 +211,9 @@ private enum PhosphorPaths {
         "M104,64A32,32,0,1,0,64,95v66a32,32,0,1,0,16,0V95A32.06,32.06,0,0,0,104,64ZM56,64A16,16,0,1,1,72,80,16,16,0,0,1,56,64ZM88,192a16,16,0,1,1-16-16A16,16,0,0,1,88,192Zm120-31V110.63a23.85,23.85,0,0,0-7-17L163.31,56H192a8,8,0,0,0,0-16H144a8,8,0,0,0-8,8V96a8,8,0,0,0,16,0V67.31L189.66,105a8,8,0,0,1,2.34,5.66V161a32,32,0,1,0,16,0Zm-8,47a16,16,0,1,1,16-16A16,16,0,0,1,200,208Z"
     static let gitMerge =
         "M208,112a32.05,32.05,0,0,0-30.69,23l-42.21-6a8,8,0,0,1-4.95-2.71L94.43,84.55A32,32,0,1,0,72,87v82a32,32,0,1,0,16,0V101.63l30,35a24,24,0,0,0,14.83,8.14l44,6.28A32,32,0,1,0,208,112ZM64,56A16,16,0,1,1,80,72,16,16,0,0,1,64,56ZM96,200a16,16,0,1,1-16-16A16,16,0,0,1,96,200Zm112-40a16,16,0,1,1,16-16A16,16,0,0,1,208,160Z"
-    // Phosphor git-commit (bold) — horizontal line with circle node
+    // Phosphor git-commit (regular) — horizontal line with circle node
     static let gitCommit =
-        "M248,120H175.3a48,48,0,0,0-94.6,0H8a8,8,0,0,0,0,16H80.7a48,48,0,0,0,94.6,0H248a8,8,0,0,0,0-16ZM128,160a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z"
+        "M248,120H183.42a56,56,0,0,0-110.84,0H8a8,8,0,0,0,0,16H72.58a56,56,0,0,0,110.84,0H248a8,8,0,0,0,0-16ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z"
     // swiftlint:enable line_length
 }
 

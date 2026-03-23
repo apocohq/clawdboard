@@ -505,6 +505,7 @@ def append_context_snapshot(state: JsonDict, pct: float, timestamp: str) -> None
 def make_base_state(
     session_id: str, cwd: str, project_name: str, now: str, claude_pid: int
 ) -> JsonDict:
+    head_sha = get_git_head_sha(cwd)
     return {
         "session_id": session_id,
         "cwd": cwd,
@@ -515,6 +516,10 @@ def make_base_state(
         "updated_at": now,
         "pid": claude_pid,
         "is_hook_tracked": True,
+        "start_sha": head_sha,
+        "head_sha": head_sha,
+        "commit_count": 0,
+        "unpushed_count": get_unpushed_count(cwd),
     }
 
 
