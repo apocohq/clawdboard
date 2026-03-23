@@ -9,3 +9,4 @@ DerivedData/
 .venv
 __pycache__/
 uv.lock
+.claude/worktrees/
