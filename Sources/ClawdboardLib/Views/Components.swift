@@ -90,12 +90,11 @@ public struct PRStatusIcon: View {
         return noPR && (commitCount ?? 0) > 0
     }
 
+    /// Whether all session commits have been pushed
+    private var allPushed: Bool { unpushedCount == 0 }
+
     private var commitColor: Color {
-        switch unpushedCount {
-        case .some(0): return .green  // all pushed
-        case .some: return .orange  // has unpushed
-        case .none: return .secondary  // no upstream
-        }
+        allPushed ? .green : .secondary
     }
 
     private var iconColor: Color {
@@ -108,7 +107,8 @@ public struct PRStatusIcon: View {
         }
     }
 
-    private var hasBadge: Bool {
+    /// Whether the badge should use colored styling (tinted background + border)
+    private var isSolidBadge: Bool {
         if showCommitBadge { return true }
         switch status {
         case .some(.open), .some(.merged), .some(.closed): return true
@@ -125,9 +125,9 @@ public struct PRStatusIcon: View {
 
     private var isClickable: Bool { clickUrl != nil }
 
-    /// Minimum badge width — wider for commit count text
+    /// Minimum badge width — wider for double-digit commit counts
     private var badgeWidth: CGFloat {
-        if showCommitBadge && (commitCount ?? 0) >= 10 { return 30 }
+        if showCommitBadge && (commitCount ?? 0) >= 10 { return 28 }
         return Self.badgeSize
     }
 
@@ -143,16 +143,16 @@ public struct PRStatusIcon: View {
         .fixedSize()
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(hasBadge ? iconColor.opacity(isHovered ? 0.22 : 0.12) : .clear)
+                .fill(isSolidBadge ? iconColor.opacity(isHovered ? 0.22 : 0.12) : .clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(
-                    hasBadge ? iconColor.opacity(isHovered ? 0.5 : 0.3) : .clear,
+                    isSolidBadge ? iconColor.opacity(isHovered ? 0.5 : 0.3) : .clear,
                     lineWidth: 0.5)
         )
         .overlay(
-            hasBadge
+            isSolidBadge
                 ? nil
                 : RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(style: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
@@ -169,7 +169,7 @@ public struct PRStatusIcon: View {
 
     @ViewBuilder
     private var commitBadgeContent: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 1) {
             SVGPathShape(svgPath: PhosphorPaths.gitCommit, viewBox: 256)
                 .foregroundStyle(commitColor)
                 .frame(width: 10, height: 10)
@@ -177,7 +177,7 @@ public struct PRStatusIcon: View {
                 .font(.system(size: 9, weight: .semibold).monospacedDigit())
                 .foregroundStyle(commitColor)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 2)
     }
 
     @ViewBuilder

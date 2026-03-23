@@ -158,7 +158,7 @@ Displays the pull request status for a session's branch using custom-drawn GitHu
 | Property | Value |
 |----------|-------|
 | Icon size | 14 x 14pt (PR icons), 10 x 10pt (commit icon) |
-| Badge min size | 24 x 24pt (PR), auto-widens for commit count (30pt for 2+ digits) |
+| Badge min size | 24 x 24pt (PR), auto-widens for commit count (28pt for 2+ digits) |
 | Badge corner radius | 6pt |
 | Badge background | Icon color at 12% opacity (22% on hover) |
 | Badge border | Icon color at 30% opacity (50% on hover), 0.5pt |
@@ -177,10 +177,12 @@ Displays the pull request status for a session's branch using custom-drawn GitHu
 | Condition | Color | Click action |
 |-----------|-------|------|
 | All pushed (`unpushedCount == 0`) | `.green` | Opens GitHub compare URL (`start_sha...head_sha`) |
-| Has unpushed (`unpushedCount > 0`) | `.orange` | Opens GitHub compare URL |
-| No upstream (`unpushedCount == nil`) | `.secondary` | Opens GitHub compare URL (if available) |
+| Has unpushed (`unpushedCount > 0`) | `.secondary` (subtle background) | Opens GitHub compare URL |
+| No upstream (`unpushedCount == nil`) | `.secondary` (subtle background) | Opens GitHub compare URL (if available) |
 
-**Commit badge layout**: Phosphor git-commit icon (10pt) + count text in `.system(size: 9, weight: .semibold).monospacedDigit()`, 2pt spacing, 4pt horizontal padding.
+**Commit badge layout**: Phosphor git-commit icon (10pt) + count text in `.system(size: 9, weight: .semibold).monospacedDigit()`, 1pt spacing, 2pt horizontal padding. Badge widens to 28pt for 2+ digit counts.
+
+All commit badge states use solid border + tinted background (same style as PR badges). Unpushed commits use `.secondary` for a subtle white-ish appearance; transitions to `.green` once all commits are pushed.
 
 **Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (dashed rectangle when no PR or commit data available).
 
