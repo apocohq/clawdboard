@@ -231,7 +231,7 @@ def get_git_dirty(cwd: str) -> bool:
         return False
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "status", "--porcelain", "-uno"],
             capture_output=True,
             text=True,
             timeout=2,
