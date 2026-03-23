@@ -86,7 +86,7 @@ public struct PRStatusIcon: View {
 
     /// Whether to show the commit badge instead of PR icon
     private var showCommitBadge: Bool {
-        let noPR = status == nil || status == .none
+        let noPR = status == nil || status == PRStatus.none
         return noPR && (commitCount ?? 0) > 0
     }
 

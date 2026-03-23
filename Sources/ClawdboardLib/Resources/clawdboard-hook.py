@@ -618,6 +618,7 @@ def handle_stop(state_file: Path, transcript_path: str, now: str) -> None:
     merge_transcript_data(state, data)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
+    update_commit_tracking(state, state.get("cwd", ""))
     write_state(state_file, state)
 
 
