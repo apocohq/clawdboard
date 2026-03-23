@@ -194,7 +194,7 @@ def main() -> None:
     # Debug logging
     subtype_suffix = f":{notification_subtype}" if notification_subtype else ""
     with open(LOG_FILE, "a") as lf:
-        lf.write(f"[{now}] {hook_event}{subtype_suffix} session={session_id}\n")
+        lf.write(f"[{now}] {hook_event}{subtype_suffix} session={session_id} cwd={cwd}\n")
 
     if hook_event == "SessionStart":
         handle_session_start(
@@ -395,6 +395,17 @@ def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
             state[key] = val
 
 
+def _reapply_git_info(
+    state: JsonDict, branch: str | None, repo: str | None
+) -> None:
+    """Re-apply git-detected values after merge_transcript_data which may clobber them
+    with stale transcript metadata (set at session start, never updated on cwd change)."""
+    if branch:
+        state["git_branch"] = branch
+    if repo:
+        state["github_repo"] = repo
+
+
 MAX_CONTEXT_SNAPSHOTS = 100
 
 
@@ -471,6 +482,15 @@ def handle_post_tool_use(
     if state is None:
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
 
+    # Detect cwd change (e.g. session moved into a worktree) and re-derive git info
+    cwd_changed = bool(cwd and cwd != state.get("cwd"))
+    if cwd_changed:
+        state["cwd"] = cwd
+        new_branch = get_git_branch(cwd)
+        new_repo = get_github_repo(cwd)
+        state["git_branch"] = new_branch
+        state["github_repo"] = new_repo
+
     # Write "working" immediately so the UI updates before the slow transcript read
     state["status"] = "working"
     state["updated_at"] = now
@@ -479,6 +499,8 @@ def handle_post_tool_use(
     # Then read transcript data and write again with full info
     data = read_transcript_data(transcript_path, state_file)
     merge_transcript_data(state, data)
+    if cwd_changed:
+        _reapply_git_info(state, new_branch, new_repo)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
@@ -511,6 +533,16 @@ def handle_user_prompt_submit(
     state = read_state(state_file)
     if state is None:
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
+
+    # Detect cwd change (e.g. session moved into a worktree) and re-derive git info
+    cwd_changed = bool(cwd and cwd != state.get("cwd"))
+    if cwd_changed:
+        state["cwd"] = cwd
+        new_branch = get_git_branch(cwd)
+        new_repo = get_github_repo(cwd)
+        state["git_branch"] = new_branch
+        state["github_repo"] = new_repo
+
     state["status"] = "working"
     state["updated_at"] = now
     # Capture the first user prompt as a fallback label
@@ -537,6 +569,8 @@ def handle_user_prompt_submit(
         if not state.get("title"):
             state["title"] = random.choice(TITLE_PLACEHOLDERS)
         merge_transcript_data(state, data)
+        if cwd_changed:
+            _reapply_git_info(state, new_branch, new_repo)
         if data.get("context_pct") is not None:
             append_context_snapshot(state, data["context_pct"], now)
         write_state(state_file, state)
@@ -544,6 +578,8 @@ def handle_user_prompt_submit(
         return
 
     merge_transcript_data(state, data)
+    if cwd_changed:
+        _reapply_git_info(state, new_branch, new_repo)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
