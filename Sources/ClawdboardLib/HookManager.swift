@@ -35,9 +35,9 @@ public class HookManager {
             let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return false }
 
-        // Check if clawdboard is enabled as a Claude plugin
+        // Check if clawdboard is enabled via the apoco-plugins marketplace
         if let plugins = settings["enabledPlugins"] as? [String: Any],
-            plugins.contains(where: { $0.key.hasPrefix("clawdboard@") && $0.value as? Bool == true })
+            plugins["clawdboard@apoco-plugins"] as? Bool == true
         {
             return true
         }
