@@ -29,12 +29,21 @@ public class HookManager {
         "UserPromptSubmit", "SessionEnd", "SubagentStart", "SubagentStop",
     ]
 
-    /// Check if all expected hooks are installed
+    /// Check if all expected hooks are installed (via plugin or direct settings)
     public var isInstalled: Bool {
         guard let data = try? Data(contentsOf: claudeSettingsPath),
-            let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let hooks = settings["hooks"] as? [String: Any]
+            let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return false }
+
+        // Check if clawdboard is enabled via the apoco-plugins marketplace
+        if let plugins = settings["enabledPlugins"] as? [String: Any],
+            plugins["clawdboard@apoco-plugins"] as? Bool == true
+        {
+            return true
+        }
+
+        // Fall back to checking for directly-registered hooks
+        guard let hooks = settings["hooks"] as? [String: Any] else { return false }
 
         return Self.hookEvents.allSatisfy { event in
             guard let eventHooks = hooks[event] as? [[String: Any]] else { return false }
