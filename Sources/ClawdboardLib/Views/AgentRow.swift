@@ -96,7 +96,12 @@ public struct AgentRow: View {
                             snapshots: session.contextSnapshots ?? [],
                             approvalTimestamps: session.approvalTimestamps ?? []
                         )
-                        PRStatusIcon(prInfo: session.prInfo)
+                        PRStatusIcon(
+                            prInfo: session.prInfo,
+                            commitCount: session.commitCount,
+                            unpushedCount: session.unpushedCount,
+                            commitCompareUrl: session.commitCompareUrl
+                        )
                     }
                     .fixedSize()
                 }
@@ -208,6 +213,25 @@ public struct AgentRow: View {
                         .frame(width: 60, alignment: .trailing)
                     DiffStatsLabel(stats: diffStats)
                         .font(.caption.monospaced())
+                }
+            }
+            if session.hasSessionCommits {
+                HStack {
+                    Text("Commits")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 60, alignment: .trailing)
+                    Text("\(session.commitCount ?? 0)")
+                        .font(.caption.monospacedDigit())
+                    if let unpushed = session.unpushedCount {
+                        Text(unpushed == 0 ? "pushed" : "\(unpushed) unpushed")
+                            .font(.caption2)
+                            .foregroundStyle(unpushed == 0 ? .green : .orange)
+                    } else {
+                        Text("no upstream")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             DetailRow("Session", session.slug ?? session.sessionId)

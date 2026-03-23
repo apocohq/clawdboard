@@ -7,8 +7,9 @@ public class SessionStateWatcher {
     private let sessionsDir: URL
     private var fileDescriptor: Int32 = -1
     private var dispatchSource: DispatchSourceFileSystemObject?
-    private var cleanupTimer: Timer?
+    private var cleanupTimer: DispatchSourceTimer?
     private let onChange: ([AgentSession]) -> Void
+    private let ioQueue = DispatchQueue(label: "clawdboard.session-watcher", qos: .utility)
 
     public init(sessionsDirectory: String? = nil, onChange: @escaping ([AgentSession]) -> Void) {
         let dir =
@@ -26,8 +27,10 @@ public class SessionStateWatcher {
         // Ensure directory exists
         try? FileManager.default.createDirectory(at: sessionsDir, withIntermediateDirectories: true)
 
-        // Initial read
-        notifyChanges()
+        // Initial read (on background queue to avoid blocking startup)
+        ioQueue.async { [weak self] in
+            self?.notifyChanges()
+        }
 
         // Set up DispatchSource for directory monitoring — fires instantly on file writes
         fileDescriptor = open(sessionsDir.path, O_EVTONLY)
@@ -35,7 +38,7 @@ public class SessionStateWatcher {
             let source = DispatchSource.makeFileSystemObjectSource(
                 fileDescriptor: fileDescriptor,
                 eventMask: [.write, .delete, .rename],
-                queue: .main
+                queue: ioQueue
             )
             source.setEventHandler { [weak self] in
                 debugLog("[SessionWatcher] DispatchSource fired")
@@ -54,21 +57,24 @@ public class SessionStateWatcher {
         // DispatchSource may coalesce rapid writes (e.g. PreToolUse + Stop in quick succession),
         // so this ensures updates are picked up within a few seconds.
         // Also handles PID liveness cleanup for crashed sessions.
-        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) {
-            [weak self] _ in
+        let timer = DispatchSource.makeTimerSource(queue: ioQueue)
+        timer.schedule(deadline: .now() + 3.0, repeating: 3.0)
+        timer.setEventHandler { [weak self] in
             self?.notifyChanges()
         }
+        timer.resume()
+        cleanupTimer = timer
     }
 
     /// Stop watching
     public func stop() {
-        cleanupTimer?.invalidate()
+        cleanupTimer?.cancel()
         cleanupTimer = nil
         dispatchSource?.cancel()
         dispatchSource = nil
     }
 
-    /// Read all state files and notify
+    /// Read all state files on background queue, then deliver results on main thread
     private func notifyChanges() {
         let start = CFAbsoluteTimeGetCurrent()
         let sessions = readAllSessions()
@@ -76,7 +82,9 @@ public class SessionStateWatcher {
         if elapsed > 50 {
             debugLog("[SessionWatcher] notifyChanges took \(Int(elapsed))ms (\(sessions.count) sessions)")
         }
-        onChange(sessions)
+        DispatchQueue.main.async { [weak self] in
+            self?.onChange(sessions)
+        }
     }
 
     /// Read all .json state files from the sessions directory.

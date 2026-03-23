@@ -69,9 +69,13 @@ public struct ContextBar: View {
 // MARK: - PR Status Icon
 
 /// Displays the pull request status for a session's branch using
-/// custom-drawn GitHub-style icons.
+/// custom-drawn GitHub-style icons. Falls back to commit badge when
+/// no PR exists but commits were made during the session.
 public struct PRStatusIcon: View {
     public let prInfo: PRInfo?
+    public var commitCount: Int?
+    public var unpushedCount: Int?
+    public var commitCompareUrl: String?
 
     @State private var isHovered = false
 
@@ -80,7 +84,22 @@ public struct PRStatusIcon: View {
 
     private var status: PRStatus? { prInfo?.status }
 
+    /// Whether to show the commit badge instead of PR icon
+    private var showCommitBadge: Bool {
+        let noPR = status == nil || status == .none
+        return noPR && (commitCount ?? 0) > 0
+    }
+
+    private var commitColor: Color {
+        switch unpushedCount {
+        case .some(0): return .green  // all pushed
+        case .some: return .orange  // has unpushed
+        case .none: return .secondary  // no upstream
+        }
+    }
+
     private var iconColor: Color {
+        if showCommitBadge { return commitColor }
         switch status {
         case .some(.open): return .green
         case .some(.merged): return .purple
@@ -90,36 +109,42 @@ public struct PRStatusIcon: View {
     }
 
     private var hasBadge: Bool {
+        if showCommitBadge { return true }
         switch status {
         case .some(.open), .some(.merged), .some(.closed): return true
         default: return false
         }
     }
 
-    private var prUrl: URL? {
-        prInfo?.url.flatMap { URL(string: $0) }
+    private var clickUrl: URL? {
+        if showCommitBadge {
+            return commitCompareUrl.flatMap { URL(string: $0) }
+        }
+        return prInfo?.url.flatMap { URL(string: $0) }
     }
 
-    private var isClickable: Bool { prUrl != nil }
+    private var isClickable: Bool { clickUrl != nil }
+
+    /// Minimum badge width — wider for commit count text
+    private var badgeWidth: CGFloat {
+        if showCommitBadge {
+            let count = commitCount ?? 0
+            if count >= 10 { return 30 }
+            return Self.badgeSize
+        }
+        return Self.badgeSize
+    }
 
     public var body: some View {
         Group {
-            switch status {
-            case .some(.open):
-                PROpenIcon()
-                    .foregroundStyle(.green)
-            case .some(.merged):
-                PRMergedIcon()
-                    .foregroundStyle(.purple)
-            case .some(.closed):
-                PRClosedIcon()
-                    .foregroundStyle(.secondary)
-            case .some(.none), nil:
-                Color.clear
+            if showCommitBadge {
+                commitBadgeContent
+            } else {
+                prBadgeContent
             }
         }
-        .frame(width: Self.iconSize, height: Self.iconSize)
-        .frame(width: Self.badgeSize, height: Self.badgeSize)
+        .frame(minWidth: badgeWidth, minHeight: Self.badgeSize)
+        .fixedSize()
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(hasBadge ? iconColor.opacity(isHovered ? 0.22 : 0.12) : .clear)
@@ -141,9 +166,43 @@ public struct PRStatusIcon: View {
         .onHover { isHovered = isClickable ? $0 : false }
         .pointingHandCursor(enabled: isClickable)
         .onTapGesture {
-            if let prUrl { NSWorkspace.shared.open(prUrl) }
+            if let clickUrl { NSWorkspace.shared.open(clickUrl) }
         }
         .animation(.easeInOut(duration: 0.1), value: isHovered)
+    }
+
+    @ViewBuilder
+    private var commitBadgeContent: some View {
+        HStack(spacing: 2) {
+            SVGPathShape(svgPath: PhosphorPaths.gitCommit, viewBox: 256)
+                .foregroundStyle(commitColor)
+                .frame(width: 10, height: 10)
+            Text("\(commitCount ?? 0)")
+                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                .foregroundStyle(commitColor)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    @ViewBuilder
+    private var prBadgeContent: some View {
+        Group {
+            switch status {
+            case .some(.open):
+                PROpenIcon()
+                    .foregroundStyle(.green)
+            case .some(.merged):
+                PRMergedIcon()
+                    .foregroundStyle(.purple)
+            case .some(.closed):
+                PRClosedIcon()
+                    .foregroundStyle(.secondary)
+            case .some(.none), nil:
+                Color.clear
+            }
+        }
+        .frame(width: Self.iconSize, height: Self.iconSize)
+        .frame(width: Self.badgeSize, height: Self.badgeSize)
     }
 }
 
@@ -156,9 +215,11 @@ private enum PhosphorPaths {
         "M104,64A32,32,0,1,0,64,95v66a32,32,0,1,0,16,0V95A32.06,32.06,0,0,0,104,64ZM56,64A16,16,0,1,1,72,80,16,16,0,0,1,56,64ZM88,192a16,16,0,1,1-16-16A16,16,0,0,1,88,192Zm120-31V110.63a23.85,23.85,0,0,0-7-17L163.31,56H192a8,8,0,0,0,0-16H144a8,8,0,0,0-8,8V96a8,8,0,0,0,16,0V67.31L189.66,105a8,8,0,0,1,2.34,5.66V161a32,32,0,1,0,16,0Zm-8,47a16,16,0,1,1,16-16A16,16,0,0,1,200,208Z"
     static let gitMerge =
         "M208,112a32.05,32.05,0,0,0-30.69,23l-42.21-6a8,8,0,0,1-4.95-2.71L94.43,84.55A32,32,0,1,0,72,87v82a32,32,0,1,0,16,0V101.63l30,35a24,24,0,0,0,14.83,8.14l44,6.28A32,32,0,1,0,208,112ZM64,56A16,16,0,1,1,80,72,16,16,0,0,1,64,56ZM96,200a16,16,0,1,1-16-16A16,16,0,0,1,96,200Zm112-40a16,16,0,1,1,16-16A16,16,0,0,1,208,160Z"
+    // Phosphor git-commit (bold) — horizontal line with circle node
+    static let gitCommit =
+        "M248,120H175.3a48,48,0,0,0-94.6,0H8a8,8,0,0,0,0,16H80.7a48,48,0,0,0,94.6,0H248a8,8,0,0,0,0-16ZM128,160a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z"
     // swiftlint:enable line_length
 }
-
 
 /// Open PR icon — Phosphor Icons git-pull-request SVG path rendered as a filled shape.
 private struct PROpenIcon: View {
@@ -286,7 +347,7 @@ private func parseSVGPath(_ d: String, into path: CGMutablePath) {
             let relative = cmd == "a"
             guard let rx = parseNumber(),
                 let ry = parseNumber(),
-                let _ = parseNumber(),  // x-axis rotation (unused for circles)
+                parseNumber() != nil,  // x-axis rotation (unused for circles)
                 let largeArc = parseNumber(),
                 let sweep = parseNumber(),
                 let ex = parseNumber(),

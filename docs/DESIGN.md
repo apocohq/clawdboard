@@ -153,27 +153,40 @@ Miniature line chart showing context usage over time per session.
 ### PRStatusIcon
 **File**: `Sources/ClawdboardLib/Views/Components.swift`
 
-Displays the pull request status for a session's branch using custom-drawn GitHub-style icons (SwiftUI Canvas). Fetched via `gh` CLI on the Swift side (`PRStatusProvider`), not from hooks.
+Displays the pull request status for a session's branch using custom-drawn GitHub-style icons (SwiftUI Canvas). Falls back to a commit count badge when no PR exists but commits were made during the session. PR data fetched via `gh` CLI on the Swift side (`PRStatusProvider`); commit data comes from the hook script.
 
 | Property | Value |
 |----------|-------|
-| Icon size | 14 x 14pt |
-| Badge size | 24 x 24pt |
+| Icon size | 14 x 14pt (PR icons), 10 x 10pt (commit icon) |
+| Badge min size | 24 x 24pt (PR), auto-widens for commit count (30pt for 2+ digits) |
 | Badge corner radius | 6pt |
 | Badge background | Icon color at 12% opacity (22% on hover) |
 | Badge border | Icon color at 30% opacity (50% on hover), 0.5pt |
 
-**States**:
+**Priority**: PR status always wins. Commit badge shown only when `prInfo` is `.none` or `nil` and `commitCount > 0`.
+
+**PR States**:
 | Status | Icon | Color | Click action |
 |--------|------|-------|------|
-| No PR / unknown | Dashed rounded rectangle outline (no icon) | `.tertiary` | None |
+| No PR / unknown (no commits) | Dashed rounded rectangle outline (no icon) | `.tertiary` | None |
 | PR open | `PROpenIcon` — Phosphor git-pull-request | `.green` | Opens PR URL |
 | PR merged | `PRMergedIcon` — Phosphor git-merge | `.purple` | Opens PR URL |
 | PR closed | `PRClosedIcon` — Phosphor git-pull-request | `.secondary` | Opens PR URL |
 
-**Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (dashed rectangle when no PR data available).
+**Commit Badge States** (shown when no PR exists):
+| Condition | Color | Click action |
+|-----------|-------|------|
+| All pushed (`unpushedCount == 0`) | `.green` | Opens GitHub compare URL (`start_sha...head_sha`) |
+| Has unpushed (`unpushedCount > 0`) | `.orange` | Opens GitHub compare URL |
+| No upstream (`unpushedCount == nil`) | `.secondary` | Opens GitHub compare URL (if available) |
 
-**Data source**: `PRStatusProvider` polls `gh pr list` with 30s per-session debounce. Requires `gh` CLI to be installed and authenticated. Cache persisted to `~/.clawdboard/pr-status-cache.json` for instant display on app launch.
+**Commit badge layout**: Phosphor git-commit icon (10pt) + count text in `.system(size: 9, weight: .semibold).monospacedDigit()`, 2pt spacing, 4pt horizontal padding.
+
+**Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (dashed rectangle when no PR or commit data available).
+
+**Data sources**:
+- PR data: `PRStatusProvider` polls `gh pr list` with 30s per-session debounce. Requires `gh` CLI to be installed and authenticated. Cache persisted to `~/.clawdboard/pr-status-cache.json` for instant display on app launch.
+- Commit data: Hook script captures `start_sha` at session start and tracks `head_sha`, `commit_count`, `unpushed_count` on each event via local `git rev-list` / `git rev-parse` commands.
 
 ---
 
@@ -255,7 +268,7 @@ Single session row. Full row is the primary click target (Fitts's Law).
 **Expanded details** (below main row):
 - Divider with 2pt vertical padding
 - Context bar row: label (60pt) + bar + percentage
-- DetailRow entries: Host, Model, Branch, Changes (+N −N colored), Session, Uptime, Path
+- DetailRow entries: Host, Model, Branch, Changes (+N −N colored), Commits (count + push status), Session, Uptime, Path
 - Subagents section: "Agents" label (60pt, trailing-aligned) + green 5×5pt dots, agent type, truncated ID — aligned with DetailRow labels
 - "Restart session for full tracking" warning in `.caption2`, `.orange` (if not hook-tracked)
 - Delete button: `trash` icon in `.caption`, `.tertiary`, 28×28pt hit target, right-aligned — shown for deletable sessions (hidden in collapsed row to prevent accidental clicks)
