@@ -332,7 +332,7 @@ struct MenuBarLabel: View {
         let waiting = appState.waitingCount
         let working = appState.workingCount
         // Read to establish SwiftUI dependency so we redraw on appearance changes
-        let _ = menuBarAppearanceObserver.isDark
+        let _ = menuBarAppearanceObserver.isDark  // swiftlint:disable:this redundant_discardable_let
 
         if approval == 0 && waiting == 0 {
             // No urgent states (approval/waiting) - just show the terminal icon
@@ -385,15 +385,19 @@ struct MenuBarLabel: View {
     private static func makeMenuBarRep(size: NSSize) -> (NSBitmapImageRep, NSSize) {
         let scale = NSScreen.main?.backingScaleFactor ?? 2.0
         let pixelSize = NSSize(width: size.width * scale, height: size.height * scale)
-        let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: Int(pixelSize.width),
-            pixelsHigh: Int(pixelSize.height),
-            bitsPerSample: 8, samplesPerPixel: 4,
-            hasAlpha: true, isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0, bitsPerPixel: 0
-        )!
+        guard
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(pixelSize.width),
+                pixelsHigh: Int(pixelSize.height),
+                bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0
+            )
+        else {
+            fatalError("Failed to create NSBitmapImageRep for menu bar icon")
+        }
         rep.size = size
         return (rep, size)
     }
@@ -541,8 +545,7 @@ final class MenuBarAppearanceObserver: NSObject {
         isDark = currentlyDark
         debugLog("[MenuBarAppearance] Attached to StatusBarWindow, isDark=\(isDark)")
 
-        kvoToken = window.observe(\.effectiveAppearance, options: [.new]) {
-            [weak self] window, _ in
+        kvoToken = window.observe(\.effectiveAppearance, options: [.new]) { [weak self] window, _ in
             let newDark =
                 window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             debugLog("[MenuBarAppearance] Appearance changed, isDark=\(newDark)")

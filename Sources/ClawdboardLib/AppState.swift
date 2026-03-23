@@ -312,33 +312,9 @@ public class AppState {
 
         var all = processedLocal + processedRemote
 
-        // Auto-delete stale sessions if configured (0 = never)
-        let autoDeleteHours = UserDefaults.standard.double(forKey: "autoDeleteHours")
-        if autoDeleteHours > 0 {
-            all.removeAll { session in
-                guard let updated = session.updatedAt ?? session.startedAt else { return false }
-                let age = now.timeIntervalSince(updated) / 3600.0
-                if age >= autoDeleteHours {
-                    deleteSession(session.sessionId)
-                    return true
-                }
-                return false
-            }
-        }
+        autoDeleteStaleSessions(&all, now: now)
 
-        // Detect any session that just transitioned to needsApproval
-        var shouldPlayAlert = false
-        for session in all {
-            let display = session.displayStatus
-            let previous = previousStatuses[session.sessionId]
-            if display == .needsApproval && previous != nil && previous != .needsApproval {
-                shouldPlayAlert = true
-            }
-            previousStatuses[session.sessionId] = display
-        }
-        // Clean up stale entries
-        let activeIds = Set(all.map(\.sessionId))
-        previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
+        let shouldPlayAlert = updateApprovalTracking(all)
 
         // Preserve diff stats from previous cycle (poller cache is the source of truth,
         // but freshly-parsed sessions arrive with nil additions/deletions).
@@ -374,6 +350,38 @@ public class AppState {
         if shouldPlayAlert {
             AlertSoundManager.shared.play()
         }
+    }
+
+    /// Remove sessions older than the configured auto-delete threshold.
+    private func autoDeleteStaleSessions(_ all: inout [AgentSession], now: Date) {
+        let autoDeleteHours = UserDefaults.standard.double(forKey: "autoDeleteHours")
+        guard autoDeleteHours > 0 else { return }
+        all.removeAll { session in
+            guard let updated = session.updatedAt ?? session.startedAt else { return false }
+            let age = now.timeIntervalSince(updated) / 3600.0
+            if age >= autoDeleteHours {
+                deleteSession(session.sessionId)
+                return true
+            }
+            return false
+        }
+    }
+
+    /// Detect sessions that just transitioned to needsApproval, update tracking, and return whether to play alert.
+    private func updateApprovalTracking(_ all: [AgentSession]) -> Bool {
+        var shouldPlayAlert = false
+        for session in all {
+            let display = session.displayStatus
+            let previous = previousStatuses[session.sessionId]
+            if display == .needsApproval && previous != nil && previous != .needsApproval {
+                shouldPlayAlert = true
+            }
+            previousStatuses[session.sessionId] = display
+        }
+        // Clean up stale entries
+        let activeIds = Set(all.map(\.sessionId))
+        previousStatuses = previousStatuses.filter { activeIds.contains($0.key) }
+        return shouldPlayAlert
     }
 
     // MARK: - Session Processing

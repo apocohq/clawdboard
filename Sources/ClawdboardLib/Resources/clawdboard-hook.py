@@ -188,7 +188,7 @@ def get_git_head_sha(cwd: str) -> str | None:
 
 
 def get_commit_count(cwd: str, start_sha: str) -> int:
-    """Return the number of commits between start_sha and HEAD (exclusive..inclusive)."""
+    """Count commits from start_sha (exclusive) to HEAD."""
     if not cwd or not start_sha:
         return 0
     try:
@@ -483,8 +483,8 @@ def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
 
 
 def _reapply_git_info(state: JsonDict, branch: str | None, repo: str | None) -> None:
-    """Re-apply git-detected values after merge_transcript_data which may clobber them
-    with stale transcript metadata (set at session start, never updated on cwd change)."""
+    """Re-apply git info after merge_transcript_data which
+    may clobber them with stale transcript metadata."""
     if branch:
         state["git_branch"] = branch
     if repo:

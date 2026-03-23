@@ -182,7 +182,13 @@ public class RemoteSessionWatcher {
     public static func installRemoteHooks(
         host: String, completion: @escaping (Result<Void, Error>) -> Void
     ) {
-        let hookScript = HookManager.remoteHookScript()
+        let hookScript: String
+        do {
+            hookScript = try HookManager.remoteHookScript()
+        } catch {
+            completion(.failure(error))
+            return
+        }
 
         let installCommand = """
             mkdir -p ~/.clawdboard/hooks ~/.clawdboard/sessions && \

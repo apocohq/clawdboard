@@ -178,8 +178,8 @@ public class HookManager {
     }
 
     /// The hook script content for remote installation
-    public static func remoteHookScript() -> String {
-        try! scriptSource("clawdboard-hook.py")
+    public static func remoteHookScript() throws -> String {
+        try scriptSource("clawdboard-hook.py")
     }
 
     /// Load a Python script by name.

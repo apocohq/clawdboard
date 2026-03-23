@@ -241,8 +241,9 @@ private struct SVGPathShape: View, Shape {
     }
 }
 
-/// Parse a subset of SVG path `d` attribute into a CGMutablePath.
-/// Supports M, m, L, l, H, h, V, v, A, a, Z, z commands.
+// Parse a subset of SVG path `d` attribute into a CGMutablePath.
+// Supports M, m, L, l, H, h, V, v, A, a, Z, z commands.
+// swiftlint:disable:next cyclomatic_complexity
 private func parseSVGPath(_ d: String, into path: CGMutablePath) {
     let chars = Array(d)
     var idx = 0
@@ -370,7 +371,8 @@ private func parseSVGPath(_ d: String, into path: CGMutablePath) {
     }
 }
 
-/// Convert SVG arc parameters to CGPath arc.
+// Convert SVG arc parameters to CGPath arc.
+// swiftlint:disable:next function_parameter_count
 private func addSVGArc(
     to path: CGMutablePath,
     from start: CGPoint, to end: CGPoint,
@@ -449,7 +451,7 @@ public struct SparklineView: View {
 
     public var body: some View {
         // tick is read here so SwiftUI tracks it as a dependency
-        let _ = tick
+        let _ = tick  // swiftlint:disable:this redundant_discardable_let
         Canvas { context, size in
             let windowStart = Date().addingTimeInterval(
                 -Double(Self.windowMinutes * 60))
@@ -482,8 +484,12 @@ public struct SparklineView: View {
 
             // Fill under the line
             var fillPath = linePath
-            fillPath.addLine(to: CGPoint(x: points.last!.x, y: size.height))
-            fillPath.addLine(to: CGPoint(x: points.first!.x, y: size.height))
+            if let lastPt = points.last {
+                fillPath.addLine(to: CGPoint(x: lastPt.x, y: size.height))
+            }
+            if let firstPt = points.first {
+                fillPath.addLine(to: CGPoint(x: firstPt.x, y: size.height))
+            }
             fillPath.closeSubpath()
             context.fill(fillPath, with: .color(strokeColor.opacity(0.15)))
 

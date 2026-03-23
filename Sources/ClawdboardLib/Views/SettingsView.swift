@@ -250,8 +250,7 @@ public struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 } else {
-                    ForEach(Array(appState.remoteHosts.enumerated()), id: \.element.id) {
-                        index, host in
+                    ForEach(Array(appState.remoteHosts.enumerated()), id: \.element.id) { index, host in
                         RemoteHostRow(
                             host: host,
                             onUpdate: { updated in
