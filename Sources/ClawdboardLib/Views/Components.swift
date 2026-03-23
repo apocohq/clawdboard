@@ -187,7 +187,7 @@ private struct SVGPathShape: View, Shape {
 /// Parse a subset of SVG path `d` attribute into a CGMutablePath.
 /// Supports M, m, L, l, H, h, V, v, A, a, Z, z commands.
 private func parseSVGPath(_ d: String, into path: CGMutablePath) {
-    var chars = Array(d)
+    let chars = Array(d)
     var idx = 0
     var currentX: CGFloat = 0
     var currentY: CGFloat = 0
