@@ -176,13 +176,15 @@ Displays the pull request status for a session's branch using custom-drawn GitHu
 **Commit Badge States** (shown when no PR exists):
 | Condition | Color | Click action |
 |-----------|-------|------|
-| All pushed (`unpushedCount == 0`) | `.green` | Opens GitHub compare URL (`start_sha...head_sha`) |
+| All pushed (`unpushedCount == 0`) | `.purple` | Opens GitHub compare URL (`start_sha...head_sha`) |
 | Has unpushed (`unpushedCount > 0`) | `.secondary` (subtle background) | Opens GitHub compare URL |
 | No upstream (`unpushedCount == nil`) | `.secondary` (subtle background) | Opens GitHub compare URL (if available) |
 
 **Commit badge layout**: Phosphor git-commit icon (10pt) + count text in `.system(size: 9, weight: .semibold).monospacedDigit()`, 1pt spacing, 2pt horizontal padding. Badge widens to 28pt for 2+ digit counts.
 
-All commit badge states use solid border + tinted background (same style as PR badges). Unpushed commits use `.secondary` for a subtle white-ish appearance; transitions to `.green` once all commits are pushed.
+All commit badge states use solid border + tinted background (same style as PR badges). Unpushed commits use `.secondary` for a subtle white-ish appearance; transitions to `.purple` (matching merged PR color) once all commits are pushed.
+
+**Dirty indicator**: A 5pt `.blue` dot overlaid on the top-trailing corner of the badge (offset x:1, y:-1). Shown when the session's working tree has uncommitted changes (`gitDirty == true`). Disappears when all changes are committed. Data comes from `git status --porcelain` in the hook script.
 
 **Placement**: Trailing edge of collapsed session row, after sparkline. Always shown (dashed rectangle when no PR or commit data available).
 

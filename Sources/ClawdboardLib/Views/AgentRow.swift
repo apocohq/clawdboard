@@ -100,7 +100,8 @@ public struct AgentRow: View {
                             prInfo: session.prInfo,
                             commitCount: session.commitCount,
                             unpushedCount: session.unpushedCount,
-                            commitCompareUrl: session.commitCompareUrl
+                            commitCompareUrl: session.commitCompareUrl,
+                            isDirty: session.gitDirty == true
                         )
                     }
                     .fixedSize()

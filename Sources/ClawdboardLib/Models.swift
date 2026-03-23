@@ -281,6 +281,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// Number of commits ahead of upstream (nil = no upstream)
     public var unpushedCount: Int?
 
+    /// Whether the working tree has uncommitted changes
+    public var gitDirty: Bool?
+
     /// Lines added relative to default branch (from git diff --shortstat)
     public var additions: Int?
 
@@ -319,6 +322,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case headSha = "head_sha"
         case commitCount = "commit_count"
         case unpushedCount = "unpushed_count"
+        case gitDirty = "git_dirty"
         case additions
         case deletions
         case contextSnapshots = "context_snapshots"
@@ -349,6 +353,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         headSha: String? = nil,
         commitCount: Int? = nil,
         unpushedCount: Int? = nil,
+        gitDirty: Bool? = nil,
         additions: Int? = nil,
         deletions: Int? = nil,
         contextSnapshots: [ContextSnapshot]? = nil,
@@ -377,6 +382,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.headSha = headSha
         self.commitCount = commitCount
         self.unpushedCount = unpushedCount
+        self.gitDirty = gitDirty
         self.additions = additions
         self.deletions = deletions
         self.contextSnapshots = contextSnapshots

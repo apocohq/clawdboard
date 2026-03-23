@@ -76,6 +76,7 @@ public struct PRStatusIcon: View {
     public var commitCount: Int?
     public var unpushedCount: Int?
     public var commitCompareUrl: String?
+    public var isDirty: Bool = false
 
     @State private var isHovered = false
 
@@ -94,7 +95,7 @@ public struct PRStatusIcon: View {
     private var allPushed: Bool { unpushedCount == 0 }
 
     private var commitColor: Color {
-        allPushed ? .green : .secondary
+        allPushed ? .purple : .secondary
     }
 
     private var iconColor: Color {
@@ -159,6 +160,14 @@ public struct PRStatusIcon: View {
                     .foregroundStyle(.tertiary)
                     .padding(1.5)
         )
+        .overlay(alignment: .topTrailing) {
+            if isDirty {
+                Circle()
+                    .fill(.blue)
+                    .frame(width: 5, height: 5)
+                    .offset(x: 1, y: -1)
+            }
+        }
         .onHover { isHovered = isClickable ? $0 : false }
         .pointingHandCursor(enabled: isClickable)
         .onTapGesture {

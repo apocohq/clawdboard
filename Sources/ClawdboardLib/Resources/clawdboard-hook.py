@@ -225,8 +225,27 @@ def get_unpushed_count(cwd: str) -> int | None:
         return None
 
 
+def get_git_dirty(cwd: str) -> bool:
+    """Return True if the working tree has uncommitted changes, False otherwise."""
+    if not cwd:
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        if result.returncode != 0:
+            return False
+        return bool(result.stdout.strip())
+    except Exception:
+        return False
+
+
 def update_commit_tracking(state: JsonDict, cwd: str) -> None:
-    """Update head_sha, commit_count, and unpushed_count from the current git state."""
+    """Update head_sha, commit_count, unpushed_count, and git_dirty."""
     head = get_git_head_sha(cwd)
     if head:
         state["head_sha"] = head
@@ -234,6 +253,7 @@ def update_commit_tracking(state: JsonDict, cwd: str) -> None:
     if start and head:
         state["commit_count"] = get_commit_count(cwd, start)
     state["unpushed_count"] = get_unpushed_count(cwd)
+    state["git_dirty"] = get_git_dirty(cwd)
 
 
 def main() -> None:
