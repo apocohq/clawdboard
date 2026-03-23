@@ -52,8 +52,7 @@ mise run lint      # Check formatting + lint
 To run the app with auto-restart on every code change:
 
 ```bash
-brew install watchexec  # one-time setup
-watchexec --restart --exts swift,py --watch Sources/ -- bash -c 'swift build && .build/debug/Clawdboard'
+mise run dev
 ```
 
 See [CLAUDE.md](CLAUDE.md) for architecture details and conventions.

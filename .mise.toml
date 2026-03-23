@@ -1,7 +1,6 @@
 [tools]
 swiftlint = "0.63"
 ruff = "latest"
-ty = "latest"
 uv = "latest"
 
 [env]
@@ -14,6 +13,21 @@ run = "swift build"
 [tasks.run]
 description = "Build and run Clawdboard"
 run = "swift run Clawdboard"
+
+[tasks.dev]
+description = "Watch mode: auto-rebuild and restart on code changes"
+run = """
+#!/bin/bash
+set -euo pipefail
+
+# Kill any existing watchexec/Clawdboard processes to prevent duplicates
+pkill -f 'watchexec.*Clawdboard' 2>/dev/null || true
+pkill -f 'watchexec.*clawdboard' 2>/dev/null || true
+pkill -f '.build/.*Clawdboard' 2>/dev/null || true
+sleep 0.5
+
+exec watchexec --restart --exts swift,py --watch Sources/ --shell=bash -- 'swift build && .build/debug/Clawdboard'
+"""
 
 [tasks.test]
 description = "Run tests (requires Xcode for Swift Testing framework)"
@@ -56,7 +70,7 @@ else
 fi
 ruff check Sources/ClawdboardLib/Resources/ scripts/
 ruff format --check Sources/ClawdboardLib/Resources/ scripts/
-ty check Sources/ClawdboardLib/Resources/ scripts/
+uvx ty check Sources/ClawdboardLib/Resources/ scripts/
 """
 
 [tasks.test-py]
@@ -72,6 +86,7 @@ description = "Install tools and configure git hooks"
 run = """
 mise install
 uv sync
+brew install watchexec 2>/dev/null || true
 mise generate git-pre-commit --write
 # Fix mise's default pre-commit hook: use newline-separated file list
 # so grep can match by extension (mise uses -z | xargs -0 which is space-separated)
@@ -111,8 +126,8 @@ if [ -n "$PY_FILES" ]; then
     echo "ruff format..."
     echo "$PY_FILES" | xargs ruff format --check
 
-    echo "ty check..."
-    echo "$PY_FILES" | xargs ty check
+    echo "uvx ty check..."
+    echo "$PY_FILES" | xargs uvx ty check
 fi
 
 echo "All checks passed."
