@@ -24,28 +24,29 @@
 
 You're running five agents. One needs approval. Two are stuck. **Clawdboard sits in your menu bar and shows you which Claude Code session needs your attention.** One click and you're there.
 
-| Agents | Need Clawdboard? |
-|--------|-----------------|
-| 1–2    | Probably not (yet) |
-| 3–5    | Yes |
-| 5+     | Yesterday |
+<table align="center">
+<tr><th>Agents</th><th>Need Clawdboard?</th></tr>
+<tr><td>1–2</td><td>Probably not (yet)</td></tr>
+<tr><td>3–5</td><td>Yes</td></tr>
+<tr><td>5+</td><td>Yesterday</td></tr>
+</table>
 
 ## What you get
 
 **See everything at a glance**
-- Status for every session — working, waiting, needs approval, abandoned
-- Context window usage — know when an agent is running hot
+- Status for every session: working, waiting, needs approval, abandoned
+- Context window usage: know when an agent is running hot
 - Model and git branch display
 
 **Get there in one click**
-- Focus in iTerm2 — jumps to the exact terminal pane
-- Focus in VS Code — opens the right workspace window
-- Focus in JetBrains — opens the project, activates terminal
+- Focus in iTerm2: jumps to the exact terminal pane
+- Focus in VS Code: opens the right workspace window
+- Focus in JetBrains: opens the project, activates terminal
 
 **Works how you work**
 - Remote host monitoring via SSH
 - Auto-cleanup of stale and crashed sessions
-- Native macOS — menu bar, not a browser tab
+- Native macOS: menu bar, not a browser tab
 
 ## Get started
 
@@ -55,7 +56,7 @@ Open Claude Code anywhere and run:
 /setup-clawdboard
 ```
 
-That's it. Builds the app, installs it, configures hooks, and sets up your IDE integration — all in one go.
+That's it. Builds the app, installs it, configures hooks, and sets up your IDE integration, all in one go.
 
 *Yes, you use Claude Code to set up your Claude Code manager. We know.*
 
@@ -90,7 +91,7 @@ mise run dev
 
 ## Contributing
 
-We're building fast. If you're into Swift, macOS dev, or just want better agent tooling — [PRs welcome](https://github.com/apocohq/clawdboard/issues).
+We're building fast. If you're into Swift, macOS dev, or just want better agent tooling: [PRs welcome](https://github.com/apocohq/clawdboard/issues).
 
 ## Star this repo ⭐
 
