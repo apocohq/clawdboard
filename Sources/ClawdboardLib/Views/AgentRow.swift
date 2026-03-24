@@ -375,8 +375,7 @@ struct TruncatingTitle: View {
             }
             .onHover { hovering in
                 isHovered = hovering
-                hoverWorkItem?.cancel()
-                hoverWorkItem = nil
+                cancelPendingPopover()
                 if hovering && isTruncated {
                     let workItem = DispatchWorkItem { [self] in
                         if isHovered { showPopover = true }
@@ -387,10 +386,31 @@ struct TruncatingTitle: View {
                     showPopover = false
                 }
             }
+            .onChange(of: isTruncated) { newValue in
+                if !newValue {
+                    dismissPopover()
+                }
+            }
+            .onChange(of: text) { _ in
+                dismissPopover()
+            }
+            .onDisappear {
+                dismissPopover()
+            }
             .popover(isPresented: $showPopover, arrowEdge: .bottom) {
                 Text(text)
                     .font(.system(.body, weight: .medium))
                     .padding(8)
             }
+    }
+
+    private func cancelPendingPopover() {
+        hoverWorkItem?.cancel()
+        hoverWorkItem = nil
+    }
+
+    private func dismissPopover() {
+        cancelPendingPopover()
+        showPopover = false
     }
 }
