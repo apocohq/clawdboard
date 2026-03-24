@@ -88,7 +88,7 @@ public class SessionStateWatcher {
     }
 
     /// Read all .json state files from the sessions directory.
-    /// Removes state files for processes that are no longer running.
+    /// Removes state files for processes that are no longer running or hidden in IDE.
     public func readAllSessions() -> [AgentSession] {
         let fm = FileManager.default
         guard
@@ -98,6 +98,7 @@ public class SessionStateWatcher {
             return []
         }
 
+        let hiddenIDs = VSCodeHiddenSessions.allHiddenSessionIDs()
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -105,6 +106,12 @@ public class SessionStateWatcher {
             guard url.pathExtension == "json" else { return nil }
             guard let data = try? Data(contentsOf: url) else { return nil }
             guard let session = try? decoder.decode(AgentSession.self, from: data) else {
+                return nil
+            }
+
+            // Session was deleted in VS Code UI — remove state file
+            if hiddenIDs.contains(session.sessionId) {
+                try? fm.removeItem(at: url)
                 return nil
             }
 
