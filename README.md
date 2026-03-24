@@ -1,38 +1,69 @@
+<div align="center">
+
+<img src="assets/icon.svg" width="120" alt="Clawdboard" />
+
 # Clawdboard
 
-Native macOS menu bar app for monitoring Claude Code agent sessions in real time.
+### Mission Control for AI Agents
 
-> **Warning** This project is under active development, created with heavy AI assistance. Use at your own risk.
+**Every idle agent is wasted capacity.**
 
-## Get Started
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![macOS](https://img.shields.io/badge/platform-macOS-black.svg)]()
+[![Swift 6](https://img.shields.io/badge/Swift-6-orange.svg)]()
+[![GitHub stars](https://img.shields.io/github/stars/apocohq/clawdboard?style=social)](https://github.com/apocohq/clawdboard/stargazers)
 
-```bash
-git clone https://github.com/apoco-labs/clawdboard.git
-cd clawdboard
-```
+<!-- 🚀 Product Hunt badge goes here after launch -->
 
-Then open Claude Code and run:
+</div>
+
+<!-- Add screenshot/GIF of the menu bar dropdown here -->
+<!-- <p align="center"><img src="assets/screenshot.png" width="600" alt="5 agents. One glance." /></p> -->
+
+---
+
+You're running five agents. One needs approval. Two are stuck. **Clawdboard sits in your menu bar and shows you which Claude Code session needs your attention.** One click and you're there.
+
+| Agents | Need Clawdboard? |
+|--------|-----------------|
+| 1–2    | Probably not (yet) |
+| 3–5    | Yes |
+| 5+     | Yesterday |
+
+## What you get
+
+**See everything at a glance**
+- Status for every session — working, waiting, needs approval, abandoned
+- Context window usage — know when an agent is running hot
+- Model and git branch display
+
+**Get there in one click**
+- Focus in iTerm2 — jumps to the exact terminal pane
+- Focus in VS Code — opens the right workspace window
+- Focus in JetBrains — opens the project, activates terminal
+
+**Works how you work**
+- Remote host monitoring via SSH
+- Auto-cleanup of stale and crashed sessions
+- Native macOS — menu bar, not a browser tab
+
+## Get started
+
+Open Claude Code anywhere and run:
 
 ```
 /setup-clawdboard
 ```
 
-This builds the app, installs it, configures hooks, and sets up your IDE integration (iTerm2 or VS Code) — all in one go.
+That's it. Builds the app, installs it, configures hooks, and sets up your IDE integration — all in one go.
 
-See the **[Setup Guide](docs/SETUP.md)** for details on what gets configured and manual setup instructions.
+*Yes, you use Claude Code to set up your Claude Code manager. We know.*
 
-## Features
+> See the [Setup Guide](docs/SETUP.md) for manual installation and details on what gets configured.
 
-- Real-time session monitoring via Claude Code hooks
-- Status indicators: working, waiting, needs approval, abandoned
-- Context window usage tracking (percentage)
-- Model and git branch display
-- "Focus in iTerm2" — switch to the exact terminal pane
-- "Focus in VS Code" — open the correct workspace window
-- "Focus in JetBrains" — open the project and activate the Terminal panel
-- Native macOS tabs support for VS Code
-- Remote host monitoring via SSH
-- Session auto-cleanup for stale/crashed sessions
+## How it works
+
+Clawdboard uses Claude Code's [hooks system](https://docs.anthropic.com/en/docs/claude-code/hooks) to receive real-time session events. No polling, no screen scraping, no daemon. Just hooks.
 
 ## Development
 
@@ -47,6 +78,8 @@ mise run format    # Auto-fix formatting
 mise run lint      # Check formatting + lint
 ```
 
+See [CLAUDE.md](CLAUDE.md) for architecture details and conventions.
+
 ### Watch Mode
 
 To run the app with auto-restart on every code change:
@@ -55,4 +88,22 @@ To run the app with auto-restart on every code change:
 mise run dev
 ```
 
-See [CLAUDE.md](CLAUDE.md) for architecture details and conventions.
+## Contributing
+
+We're building fast. If you're into Swift, macOS dev, or just want better agent tooling — [PRs welcome](https://github.com/apocohq/clawdboard/issues).
+
+## Star this repo ⭐
+
+You'll get notified when we ship updates. We're shipping a lot.
+
+## Built with
+
+Swift 6 · SwiftUI · macOS native · [Claude Code Hooks API](https://docs.anthropic.com/en/docs/claude-code/hooks)
+
+---
+
+<div align="center">
+
+MIT License · [Website](https://clawdboard.com) · Built for [Claude Code](https://claude.ai/code)
+
+</div>
