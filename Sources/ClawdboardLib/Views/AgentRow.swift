@@ -13,6 +13,8 @@ public struct AgentRow: View {
     public var onDelete: (() -> Void)?
 
     @State private var isHovered = false
+    @State private var isTitleHovered = false
+    @State private var showTitlePopover = false
 
     public init(
         session: AgentSession,
@@ -43,9 +45,11 @@ public struct AgentRow: View {
                     StatusDot(status: session.displayStatus)
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(session.displayTitle)
-                            .font(.system(.body, weight: .medium))
-                            .lineLimit(1)
+                        TruncatingTitle(
+                            text: session.displayTitle,
+                            isHovered: $isTitleHovered,
+                            showPopover: $showTitlePopover
+                        )
 
                         HStack(spacing: 4) {
                             if let host = session.remoteHost {
@@ -188,6 +192,8 @@ public struct AgentRow: View {
             Divider()
                 .padding(.vertical, 2)
 
+            DetailRow("Title", session.displayTitle)
+
             if let pct = session.contextPct {
                 HStack(spacing: 6) {
                     Text("Context")
@@ -310,5 +316,54 @@ struct DiffStatsLabel: View {
 
     private var parts: [String] {
         stats.split(separator: " ").map(String.init)
+    }
+}
+
+// MARK: - Truncating Title
+
+/// Shows a popover with the full title after a 0.7s hover delay, but only when truncated.
+struct TruncatingTitle: View {
+    let text: String
+    @Binding var isHovered: Bool
+    @Binding var showPopover: Bool
+    @State private var isTruncated = false
+
+    var body: some View {
+        Text(text)
+            .font(.system(.body, weight: .medium))
+            .lineLimit(1)
+            .background(
+                GeometryReader { visible in
+                    Text(text)
+                        .font(.system(.body, weight: .medium))
+                        .fixedSize()
+                        .hidden()
+                        .background(
+                            GeometryReader { full in
+                                Color.clear
+                                    .onAppear {
+                                        isTruncated = full.size.width > visible.size.width
+                                    }
+                                    .onChange(of: text) {
+                                        isTruncated = full.size.width > visible.size.width
+                                    }
+                            })
+                }
+            )
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering && isTruncated {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                        if isHovered { showPopover = true }
+                    }
+                } else {
+                    showPopover = false
+                }
+            }
+            .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+                Text(text)
+                    .font(.system(.body, weight: .medium))
+                    .padding(8)
+            }
     }
 }
