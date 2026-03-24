@@ -9,9 +9,14 @@ public class SessionStateWatcher {
     private var dispatchSource: DispatchSourceFileSystemObject?
     private var cleanupTimer: DispatchSourceTimer?
     private let onChange: ([AgentSession]) -> Void
+    private let hiddenIDsProvider: () -> Set<String>
     private let ioQueue = DispatchQueue(label: "clawdboard.session-watcher", qos: .utility)
 
-    public init(sessionsDirectory: String? = nil, onChange: @escaping ([AgentSession]) -> Void) {
+    public init(
+        sessionsDirectory: String? = nil,
+        hiddenIDsProvider: @escaping () -> Set<String> = { VSCodeHiddenSessions.allHiddenSessionIDs() },
+        onChange: @escaping ([AgentSession]) -> Void
+    ) {
         let dir =
             sessionsDirectory
             ?? {
@@ -19,6 +24,7 @@ public class SessionStateWatcher {
                 return home.appendingPathComponent(".clawdboard/sessions").path
             }()
         self.sessionsDir = URL(fileURLWithPath: dir)
+        self.hiddenIDsProvider = hiddenIDsProvider
         self.onChange = onChange
     }
 
@@ -98,7 +104,7 @@ public class SessionStateWatcher {
             return []
         }
 
-        let hiddenIDs = VSCodeHiddenSessions.allHiddenSessionIDs()
+        let hiddenIDs = hiddenIDsProvider()
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 

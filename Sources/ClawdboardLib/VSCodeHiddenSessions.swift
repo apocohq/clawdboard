@@ -62,7 +62,7 @@ public enum VSCodeHiddenSessions {
         guard
             let entries = try? FileManager.default.contentsOfDirectory(
                 at: appSupportURL,
-                includingPropertiesForKeys: [.isDirectoryKey],
+                includingPropertiesForKeys: nil,
                 options: .skipsHiddenFiles
             )
         else { return [] }
