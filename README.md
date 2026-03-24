@@ -25,13 +25,13 @@
 You're running five agents. One needs approval. Two are stuck. **Clawdboard sits in your menu bar and shows you which Claude Code session needs your attention.** One click and you're there.
 
 <table align="center">
-<tr><th>Agents</th><th>Need Clawdboard?</th></tr>
+<tr><th>Agents in your workflow</th><th>Need Clawdboard?</th></tr>
 <tr><td>1–2</td><td>Probably not (yet)</td></tr>
 <tr><td>3–5</td><td>Yes</td></tr>
 <tr><td>5+</td><td>Yesterday</td></tr>
 </table>
 
-## What you get
+## What Clawdboard Solves
 
 **See everything at a glance**
 - Status for every session: working, waiting, needs approval, abandoned
