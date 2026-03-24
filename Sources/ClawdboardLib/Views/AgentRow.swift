@@ -321,12 +321,29 @@ struct DiffStatsLabel: View {
 
 // MARK: - Truncating Title
 
+private struct VisibleWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct FullWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 /// Shows a popover with the full title after a 0.7s hover delay, but only when truncated.
 struct TruncatingTitle: View {
     let text: String
     @Binding var isHovered: Bool
     @Binding var showPopover: Bool
     @State private var isTruncated = false
+    @State private var visibleWidth: CGFloat = 0
+    @State private var fullWidth: CGFloat = 0
+    @State private var hoverWorkItem: DispatchWorkItem?
 
     var body: some View {
         Text(text)
@@ -334,28 +351,38 @@ struct TruncatingTitle: View {
             .lineLimit(1)
             .background(
                 GeometryReader { visible in
-                    Text(text)
-                        .font(.system(.body, weight: .medium))
-                        .fixedSize()
-                        .hidden()
-                        .background(
-                            GeometryReader { full in
-                                Color.clear
-                                    .onAppear {
-                                        isTruncated = full.size.width > visible.size.width
-                                    }
-                                    .onChange(of: text) {
-                                        isTruncated = full.size.width > visible.size.width
-                                    }
-                            })
+                    Color.clear.preference(key: VisibleWidthKey.self, value: visible.size.width)
                 }
             )
+            .overlay(
+                Text(text)
+                    .font(.system(.body, weight: .medium))
+                    .fixedSize()
+                    .hidden()
+                    .background(
+                        GeometryReader { full in
+                            Color.clear.preference(key: FullWidthKey.self, value: full.size.width)
+                        }
+                    )
+            )
+            .onPreferenceChange(VisibleWidthKey.self) { width in
+                visibleWidth = width
+                isTruncated = fullWidth > width
+            }
+            .onPreferenceChange(FullWidthKey.self) { width in
+                fullWidth = width
+                isTruncated = width > visibleWidth
+            }
             .onHover { hovering in
                 isHovered = hovering
+                hoverWorkItem?.cancel()
+                hoverWorkItem = nil
                 if hovering && isTruncated {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                    let workItem = DispatchWorkItem { [self] in
                         if isHovered { showPopover = true }
                     }
+                    hoverWorkItem = workItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: workItem)
                 } else {
                     showPopover = false
                 }

@@ -250,3 +250,22 @@ class TestEventHandlers:
         hook.handle_subagent_start(state_file, "", "general", NOW)
         state = json.loads(state_file.read_text())
         assert len(state["subagents"]) == 0
+
+
+# -- Tag stripping / first-line extraction --
+
+
+class TestExtractPromptFirstLine:
+    def test_strips_xml_tags_and_returns_first_line(self, hook):
+        prompt = (
+            "<ide_opened_file>user opened foo.swift</ide_opened_file>"
+            "<system_context>ctx\nmore</system_context>"
+            "fix the login bug\nsecond line"
+        )
+        assert hook.extract_prompt_first_line(prompt) == "fix the login bug"
+
+    def test_plain_prompt_returns_first_line(self, hook):
+        assert hook.extract_prompt_first_line("hello world\nbye") == "hello world"
+
+    def test_all_tags_returns_none(self, hook):
+        assert hook.extract_prompt_first_line("<tag>only tags</tag>") is None

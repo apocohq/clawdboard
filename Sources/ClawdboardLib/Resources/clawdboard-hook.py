@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -37,28 +38,55 @@ TITLE_PLACEHOLDERS = [
 ]
 
 # Whimsical fallback titles when AI title generation fails (Claude-style)
-TITLE_FALLBACKS = [
-    "caffeinated-quokka",
-    "wandering-platypus",
-    "cosmic-pangolin",
-    "turbo-capybara",
-    "electric-narwhal",
-    "quantum-wombat",
-    "galloping-axolotl",
-    "hypersonic-otter",
-    "neon-tardigrade",
-    "interstellar-corgi",
-    "volcanic-penguin",
-    "supersonic-sloth",
-    "midnight-flamingo",
-    "chromatic-hedgehog",
-    "orbital-raccoon",
-    "fizzy-chameleon",
-    "turbulent-lemur",
-    "galactic-puffin",
-    "velvet-ocelot",
-    "sparkling-ibex",
+
+_TITLE_ADJECTIVES = [
+    "caffeinated",
+    "wandering",
+    "cosmic",
+    "turbo",
+    "electric",
+    "quantum",
+    "galloping",
+    "hypersonic",
+    "neon",
+    "interstellar",
+    "volcanic",
+    "supersonic",
+    "midnight",
+    "chromatic",
+    "orbital",
+    "fizzy",
+    "turbulent",
+    "galactic",
+    "velvet",
+    "sparkling",
 ]
+_TITLE_ANIMALS = [
+    "quokka",
+    "platypus",
+    "pangolin",
+    "capybara",
+    "narwhal",
+    "wombat",
+    "axolotl",
+    "otter",
+    "tardigrade",
+    "corgi",
+    "penguin",
+    "sloth",
+    "flamingo",
+    "hedgehog",
+    "raccoon",
+    "chameleon",
+    "lemur",
+    "puffin",
+    "ocelot",
+    "ibex",
+]
+
+TITLE_FALLBACKS = list(
+    f"{adj}-{animal}" for adj, animal in product(_TITLE_ADJECTIVES, _TITLE_ANIMALS)
+)
 
 
 def get_context_window(model_id: str) -> int:
@@ -445,13 +473,12 @@ def write_state(state_file: Path, state: JsonDict) -> None:
 
 
 _TITLE_SYSTEM_PROMPT = (
-    "Generate a short kebab-case slug title for a session based on the user messages. "
-    "There is a strict format requirement: maximum 5 words, lowercase, hyphens between words. "
-    "You must follow the format instructions exactly and only output the slug, no explanation. "
-    "It should describe the task like a code branch name. "
-    "Examples: api-refactor, auth-module, test-suite, docs-update, cleanup, "
-    "fix-login, db-migration, css-overhaul, perf-tuning, dep-upgrade. "
-    "Just output the slug, nothing else."
+    "Generate a 1-4 word kebab-case slug summarizing the topic of the user messages. "
+    "Rules: lowercase, hyphens between words, no explanation, no commentary. "
+    "Always generate a slug, even if the topic is not about coding. "
+    "Examples: api-refactor, ant-habitats, shark-biology, fix-login, db-migration, "
+    "gorilla-facts, perf-tuning, tree-species, dep-upgrade, recipe-ideas. "
+    "Output ONLY the slug."
 )
 
 _TITLE_SCRIPT = """\
@@ -481,9 +508,16 @@ try:
         if proc.returncode == 0 and stdout:
             text = stdout.strip()
             if not text.lower().startswith("error"):
-                raw = text.lower().replace(" ", "-").replace("_", "-")[:40]
-                title = re.sub(r"[^a-z0-9-]", "", raw)
-                title = re.sub(r"-{2,}", "-", title).strip("-")
+                raw = text.lower().replace(" ", "-").replace("_", "-")
+                slug = re.sub(r"[^a-z0-9-]", "", raw)
+                slug = re.sub(r"-{2,}", "-", slug).strip("-")
+                if slug:
+                    words = slug.split("-")
+                    title = words[0]
+                    for word in words[1:]:
+                        if len(title) + len(word) + 1 > 40:
+                            break
+                        title += "-" + word
     except subprocess.TimeoutExpired:
         # Kill the entire process group to avoid orphaned children
         try:
@@ -497,7 +531,7 @@ try:
 except Exception:
     pass
 
-# Fall back to a whimsical name seeded from session ID
+# Fall back to a whimsical name
 if not title and fallbacks:
     idx = random.choice(range(len(fallbacks)))
     title = fallbacks[idx]
@@ -513,6 +547,15 @@ try:
 except Exception:
     pass
 """
+
+
+def extract_prompt_first_line(prompt: str, max_len: int = 200) -> str | None:
+    """Strip IDE/system XML tags and return the first line, or None if empty."""
+    cleaned = re.sub(r"<([^>]+)>.*?</\1>", "", prompt, flags=re.DOTALL).strip()
+    if not cleaned:
+        return None
+    first_line = cleaned.split("\n")[0].strip()[:max_len]
+    return first_line or None
 
 
 def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
@@ -723,12 +766,9 @@ def handle_user_prompt_submit(
     state["user_message_count"] = count
     prompts = state.get("user_prompts", [])
     if len(prompts) < 2 and prompt:
-        # Strip IDE/system tags (e.g. <ide_opened_file>...) before using for title
-        cleaned = re.sub(r"<([^>]+)>.*?</\1>", "", prompt, flags=re.DOTALL).strip()
-        if cleaned:
-            first_line = cleaned.split("\n")[0].strip()[:200]
-            if first_line:
-                prompts.append(first_line)
+        first_line = extract_prompt_first_line(prompt)
+        if first_line:
+            prompts.append(first_line)
         state["user_prompts"] = prompts
 
     # Generate title on message 1 (quick) and message 2 (refined)
