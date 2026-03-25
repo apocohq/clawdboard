@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="assets/icon.svg" width="120" alt="Clawdboard" />
-
 # Clawdboard
 
 ### Mission Control for AI Agents
