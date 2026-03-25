@@ -772,9 +772,14 @@ def handle_user_prompt_submit(
         state["user_prompts"] = prompts
 
     # Generate title on message 1 (quick) and message 2 (refined)
-    # Message 2 always triggers even if message 1 generation is still running
+    # Message 2 only re-triggers if the title is still a placeholder
+    # (i.e. message 1's async generation hasn't finished yet)
+    title_is_placeholder = state.get("title", "") in ("", *TITLE_PLACEHOLDERS)
     should_generate = count in (1, 2) and prompts
-    if should_generate and (count == 2 or not state.get("title_generating")):
+    if should_generate and (
+        (count == 2 and title_is_placeholder)
+        or (count == 1 and not state.get("title_generating"))
+    ):
         state["title_generating"] = True
         if not state.get("title"):
             state["title"] = random.choice(TITLE_PLACEHOLDERS)
