@@ -269,3 +269,37 @@ class TestExtractPromptFirstLine:
 
     def test_all_tags_returns_none(self, hook):
         assert hook.extract_prompt_first_line("<tag>only tags</tag>") is None
+
+
+# -- Commit tracking --
+
+
+class TestUpdateCommitTracking:
+    def test_resets_start_sha_when_not_ancestor(self, hook):
+        """start_sha should reset to HEAD when it's no longer an ancestor (rebase/force-push)."""
+        state = {"start_sha": "old_sha", "head_sha": "old_sha", "commit_count": 3}
+        with (
+            patch.object(hook, "get_git_head_sha", return_value="new_head"),
+            patch.object(hook, "is_ancestor", return_value=False),
+            patch.object(hook, "get_unpushed_count", return_value=0),
+            patch.object(hook, "get_git_dirty", return_value=False),
+        ):
+            hook.update_commit_tracking(state, "/fake")
+        assert state["start_sha"] == "new_head"
+        assert state["commit_count"] == 0
+
+    def test_keeps_start_sha_when_ancestor(self, hook):
+        """start_sha should stay and commit_count should update normally."""
+        state = {"start_sha": "old_sha", "head_sha": "old_sha", "commit_count": 0}
+        with (
+            patch.object(hook, "get_git_head_sha", return_value="new_head"),
+            patch.object(hook, "is_ancestor", return_value=True),
+            patch.object(hook, "get_commit_count", return_value=2),
+            patch.object(hook, "get_unpushed_count", return_value=1),
+            patch.object(hook, "get_git_dirty", return_value=True),
+        ):
+            hook.update_commit_tracking(state, "/fake")
+        assert state["start_sha"] == "old_sha"
+        assert state["commit_count"] == 2
+        assert state["unpushed_count"] == 1
+        assert state["git_dirty"] is True
