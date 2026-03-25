@@ -236,13 +236,31 @@ def get_git_dirty(cwd: str) -> bool:
         return False
 
 
+def is_ancestor(cwd: str, ancestor: str, descendant: str) -> bool:
+    """Return True if ancestor is an ancestor of (or equal to) descendant."""
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            capture_output=True,
+            timeout=2,
+            cwd=cwd,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def update_commit_tracking(state: JsonDict, cwd: str) -> None:
     """Update head_sha, commit_count, unpushed_count, and git_dirty."""
     head = get_git_head_sha(cwd)
     if head:
         state["head_sha"] = head
     start = state.get("start_sha")
-    if start and head:
+    # Reset start_sha if it's no longer an ancestor of HEAD (rebase, force-push, etc.)
+    if start and head and start != head and not is_ancestor(cwd, start, head):
+        state["start_sha"] = head
+        state["commit_count"] = 0
+    elif start and head:
         state["commit_count"] = get_commit_count(cwd, start)
     state["unpushed_count"] = get_unpushed_count(cwd)
     state["git_dirty"] = get_git_dirty(cwd)
@@ -513,6 +531,29 @@ def merge_transcript_data(state: JsonDict, transcript_data: JsonDict) -> None:
             state[key] = val
 
 
+def _detect_git_context_change(
+    state: JsonDict, cwd: str
+) -> tuple[bool, str | None, str | None]:
+    """Detect cwd or branch change, update state, return (changed, branch, repo)."""
+    cwd_changed = bool(cwd and cwd != state.get("cwd"))
+    effective_cwd = cwd if cwd else state.get("cwd", "")
+    new_branch = get_git_branch(effective_cwd)
+    new_repo: str | None = None
+    if cwd_changed:
+        state["cwd"] = cwd
+        new_repo = get_github_repo(cwd)
+        state["github_repo"] = new_repo
+    branch_changed = bool(new_branch and new_branch != state.get("git_branch"))
+    changed = cwd_changed or branch_changed
+    if changed:
+        state["git_branch"] = new_branch
+        head_sha = get_git_head_sha(effective_cwd)
+        state["start_sha"] = head_sha
+        state["head_sha"] = head_sha
+        state["commit_count"] = 0
+    return changed, new_branch, new_repo or state.get("github_repo")
+
+
 def _reapply_git_info(state: JsonDict, branch: str | None, repo: str | None) -> None:
     """Re-apply git info after merge_transcript_data which
     may clobber them with stale transcript metadata."""
@@ -608,20 +649,7 @@ def handle_post_tool_use(
     if state is None:
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
 
-    # Detect cwd change (e.g. session moved into a worktree) and re-derive git info
-    cwd_changed = bool(cwd and cwd != state.get("cwd"))
-    if cwd_changed:
-        state["cwd"] = cwd
-        new_branch = get_git_branch(cwd)
-        new_repo = get_github_repo(cwd)
-        state["git_branch"] = new_branch
-        state["github_repo"] = new_repo
-        # Reset start_sha when repo changes
-        head_sha = get_git_head_sha(cwd)
-        state["start_sha"] = head_sha
-        state["head_sha"] = head_sha
-        state["commit_count"] = 0
-        state["unpushed_count"] = get_unpushed_count(cwd)
+    git_changed, new_branch, new_repo = _detect_git_context_change(state, cwd)
 
     # Write "working" immediately so the UI updates before the slow transcript read
     state["status"] = "working"
@@ -631,7 +659,7 @@ def handle_post_tool_use(
     # Then read transcript data and write again with full info
     data = read_transcript_data(transcript_path, state_file)
     merge_transcript_data(state, data)
-    if cwd_changed:
+    if git_changed:
         _reapply_git_info(state, new_branch, new_repo)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
@@ -668,20 +696,7 @@ def handle_user_prompt_submit(
     if state is None:
         state = make_base_state(session_id, cwd, project_name, now, claude_pid)
 
-    # Detect cwd change (e.g. session moved into a worktree) and re-derive git info
-    cwd_changed = bool(cwd and cwd != state.get("cwd"))
-    if cwd_changed:
-        state["cwd"] = cwd
-        new_branch = get_git_branch(cwd)
-        new_repo = get_github_repo(cwd)
-        state["git_branch"] = new_branch
-        state["github_repo"] = new_repo
-        # Reset start_sha when repo changes
-        head_sha = get_git_head_sha(cwd)
-        state["start_sha"] = head_sha
-        state["head_sha"] = head_sha
-        state["commit_count"] = 0
-        state["unpushed_count"] = get_unpushed_count(cwd)
+    git_changed, new_branch, new_repo = _detect_git_context_change(state, cwd)
 
     state["status"] = "working"
     state["updated_at"] = now
@@ -712,7 +727,7 @@ def handle_user_prompt_submit(
     ):
         state["title_generating"] = True
         merge_transcript_data(state, data)
-        if cwd_changed:
+        if git_changed:
             _reapply_git_info(state, new_branch, new_repo)
         if data.get("context_pct") is not None:
             append_context_snapshot(state, data["context_pct"], now)
@@ -722,7 +737,7 @@ def handle_user_prompt_submit(
         return
 
     merge_transcript_data(state, data)
-    if cwd_changed:
+    if git_changed:
         _reapply_git_info(state, new_branch, new_repo)
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
