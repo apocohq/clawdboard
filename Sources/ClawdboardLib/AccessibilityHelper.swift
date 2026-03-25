@@ -141,9 +141,11 @@ public enum AccessibilityHelper {
 
         var position = CGPoint.zero
         var size = CGSize.zero
+        // swiftlint:disable:next force_cast
+        let axPos = posValue as! AXValue
+        // swiftlint:disable:next force_cast
+        let axSize = sizeValue as! AXValue
         guard
-            let axPos = posValue as? AXValue,
-            let axSize = sizeValue as? AXValue,
             AXValueGetValue(axPos, .cgPoint, &position),
             AXValueGetValue(axSize, .cgSize, &size)
         else {
