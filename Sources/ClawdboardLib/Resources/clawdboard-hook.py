@@ -497,7 +497,7 @@ try:
     proc = subprocess.Popen(
         ["claude", "-p", "--model", "haiku", "--no-session-persistence",
          "--system-prompt", system_prompt, "--tools", "",
-         "--output-format", "text", "--max-budget-usd", "0.01",
+         "--output-format", "text", "--max-budget-usd", "0.05",
          claude_prompt],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL, text=True,
