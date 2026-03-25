@@ -10,9 +10,11 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,57 @@ TITLE_PLACEHOLDERS = [
     "booting-up",
     "revving-up",
 ]
+
+# Whimsical fallback titles when AI title generation fails (Claude-style)
+
+_TITLE_ADJECTIVES = [
+    "caffeinated",
+    "wandering",
+    "cosmic",
+    "turbo",
+    "electric",
+    "quantum",
+    "galloping",
+    "hypersonic",
+    "neon",
+    "interstellar",
+    "volcanic",
+    "supersonic",
+    "midnight",
+    "chromatic",
+    "orbital",
+    "fizzy",
+    "turbulent",
+    "galactic",
+    "velvet",
+    "sparkling",
+]
+_TITLE_ANIMALS = [
+    "quokka",
+    "platypus",
+    "pangolin",
+    "capybara",
+    "narwhal",
+    "wombat",
+    "axolotl",
+    "otter",
+    "tardigrade",
+    "corgi",
+    "penguin",
+    "sloth",
+    "flamingo",
+    "hedgehog",
+    "raccoon",
+    "chameleon",
+    "lemur",
+    "puffin",
+    "ocelot",
+    "ibex",
+]
+
+TITLE_FALLBACKS = list(
+    f"{adj}-{animal}" for adj, animal in product(_TITLE_ADJECTIVES, _TITLE_ANIMALS)
+)
 
 
 def get_context_window(model_id: str) -> int:
@@ -419,30 +472,33 @@ def write_state(state_file: Path, state: JsonDict) -> None:
     tmp.rename(state_file)
 
 
+_TITLE_SYSTEM_PROMPT = (
+    "Generate a 1-4 word kebab-case slug summarizing the topic of the user messages. "
+    "Rules: lowercase, hyphens between words, no explanation, no commentary. "
+    "Always generate a slug, even if the topic is not about coding. "
+    "Examples: api-refactor, ant-habitats, shark-biology, fix-login, db-migration, "
+    "gorilla-facts, perf-tuning, tree-species, dep-upgrade, recipe-ideas. "
+    "Output ONLY the slug."
+)
+
 _TITLE_SCRIPT = """\
-import json, os, re, signal, subprocess
+import json, os, re, signal, subprocess, random
 from pathlib import Path
 
 state_file = Path(os.environ["_CLAWDBOARD_STATE_FILE"])
 prompts = json.loads(os.environ["_CLAWDBOARD_PROMPTS"])
+fallbacks = json.loads(os.environ["_CLAWDBOARD_TITLE_FALLBACKS"])
+system_prompt = os.environ["_CLAWDBOARD_TITLE_SYSTEM_PROMPT"]
 
-prompt_text = "\\n".join(f"Message {i+1}: {p}" for i, p in enumerate(prompts))
-claude_prompt = (
-    "Given these user messages from a coding session, generate a short "
-    "kebab-case slug title (1-3 words, lowercase, hyphens between words). "
-    "It should describe the task like a branch name. "
-    "Examples: api-refactor, auth-module, test-suite, docs-update, cleanup, "
-    "fix-login, db-migration, css-overhaul, perf-tuning, dep-upgrade. "
-    "Just output the slug, nothing else.\\n\\n"
-    + prompt_text
-)
+claude_prompt = "\\n".join(f"Message {i+1}: {p}" for i, p in enumerate(prompts))
 
 title = ""
 try:
     proc = subprocess.Popen(
         ["claude", "-p", "--model", "haiku", "--no-session-persistence",
-         claude_prompt, "--output-format", "text",
-         "--max-budget-usd", "0.01"],
+         "--system-prompt", system_prompt, "--tools", "",
+         "--output-format", "text", "--max-budget-usd", "0.05",
+         claude_prompt],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL, text=True,
         start_new_session=True,
@@ -450,9 +506,18 @@ try:
     try:
         stdout, _ = proc.communicate(timeout=15)
         if proc.returncode == 0 and stdout:
-            raw = stdout.strip().lower().replace(" ", "-").replace("_", "-")[:40]
-            title = re.sub(r"[^a-z0-9-]", "", raw)
-            title = re.sub(r"-{2,}", "-", title).strip("-")
+            text = stdout.strip()
+            if not text.lower().startswith("error"):
+                raw = text.lower().replace(" ", "-").replace("_", "-")
+                slug = re.sub(r"[^a-z0-9-]", "", raw)
+                slug = re.sub(r"-{2,}", "-", slug).strip("-")
+                if slug:
+                    words = slug.split("-")
+                    title = words[0]
+                    for word in words[1:]:
+                        if len(title) + len(word) + 1 > 40:
+                            break
+                        title += "-" + word
     except subprocess.TimeoutExpired:
         # Kill the entire process group to avoid orphaned children
         try:
@@ -465,6 +530,11 @@ try:
             pass
 except Exception:
     pass
+
+# Fall back to a whimsical name
+if not title and fallbacks:
+    idx = random.choice(range(len(fallbacks)))
+    title = fallbacks[idx]
 
 try:
     state = json.loads(state_file.read_text())
@@ -479,12 +549,23 @@ except Exception:
 """
 
 
+def extract_prompt_first_line(prompt: str, max_len: int = 200) -> str | None:
+    """Strip IDE/system XML tags and return the first line, or None if empty."""
+    cleaned = re.sub(r"<([^>]+)>.*?</\1>", "", prompt, flags=re.DOTALL).strip()
+    if not cleaned:
+        return None
+    first_line = cleaned.split("\n")[0].strip()[:max_len]
+    return first_line or None
+
+
 def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
     """Spawn a detached process to generate a session title via claude CLI."""
     env = os.environ.copy()
     env["_CLAWDBOARD_TITLE_GEN"] = "1"
     env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
     env["_CLAWDBOARD_PROMPTS"] = json.dumps(user_prompts)
+    env["_CLAWDBOARD_TITLE_FALLBACKS"] = json.dumps(TITLE_FALLBACKS)
+    env["_CLAWDBOARD_TITLE_SYSTEM_PROMPT"] = _TITLE_SYSTEM_PROMPT
     subprocess.Popen(
         [sys.executable, "-c", _TITLE_SCRIPT],
         stdin=subprocess.DEVNULL,
@@ -685,7 +766,7 @@ def handle_user_prompt_submit(
     state["user_message_count"] = count
     prompts = state.get("user_prompts", [])
     if len(prompts) < 2 and prompt:
-        first_line = prompt.strip().split("\n")[0].strip()[:200]
+        first_line = extract_prompt_first_line(prompt)
         if first_line:
             prompts.append(first_line)
         state["user_prompts"] = prompts
