@@ -17,14 +17,17 @@ public struct DetachedPanelView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                if let limits = appState.usageLimits {
-                    Button {
-                        appState.refreshUsageLimits()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Usage updated \(PanelView.updatedText(limits.updatedAt))")
+                Button {
+                    appState.refreshUsageLimits()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
                 }
+                .help(
+                    appState.usageLimits.map {
+                        "Usage updated \(PanelView.updatedText($0.updatedAt))"
+                    }
+                        ?? "Refresh usage data"
+                )
             }
             ToolbarItem(placement: .primaryAction) {
                 settingsMenu

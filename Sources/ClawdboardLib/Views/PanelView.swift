@@ -17,6 +17,25 @@ public struct SessionsContent: View {
             )
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+        } else if let error = appState.usageLimitsError {
+            HStack(spacing: 6) {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Button {
+                    appState.refreshUsageLimits()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Retry loading usage data")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
 
         if appState.sessions.isEmpty {
@@ -128,17 +147,18 @@ public struct PanelView: View {
             .toggleStyle(.checkbox)
             .controlSize(.small)
 
-            if let limits = appState.usageLimits {
-                Button {
-                    appState.refreshUsageLimits()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Usage updated \(Self.updatedText(limits.updatedAt))")
+            Button {
+                appState.refreshUsageLimits()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .buttonStyle(.plain)
+            .help(
+                appState.usageLimits.map { "Usage updated \(Self.updatedText($0.updatedAt))" }
+                    ?? "Refresh usage data"
+            )
 
             Menu {
                 SettingsLink {
