@@ -67,7 +67,7 @@ For Clawdboard to focus the exact terminal tab in JetBrains IDEs, two things are
    ```bash
    export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
    ```
-2. **Install the [Terminal Tab Tailor](https://plugins.jetbrains.com/plugin/25498-terminal-tab-tailor) plugin** in your JetBrains IDE — this propagates ANSI title escapes to the tab name.
+2. **Install the [Terminal Tab Tailor](https://plugins.jetbrains.com/plugin/23903-terminal-tab-tailor) plugin** in your JetBrains IDE — this propagates ANSI title escapes to the tab name.
 
 ## How it works
 
