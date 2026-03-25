@@ -390,24 +390,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.prInfo = prInfo
     }
 
-    /// Display title: AI-generated slug title, or a placeholder while generating
+    /// Display title: AI-generated slug title, or generic fallback
     public var displayTitle: String {
-        if let title = title {
-            return title
-        }
-        // Stable random placeholder seeded from session ID
-        let placeholders = [
-            "new-session",
-            "getting-started",
-            "loading...",
-            "spinning-up",
-            "warming-up",
-            "initializing",
-            "booting-up",
-            "revving-up",
-        ]
-        let index = abs(sessionId.hashValue) % placeholders.count
-        return placeholders[index]
+        title ?? "new-session"
     }
 
     /// Formatted context usage like "68%"

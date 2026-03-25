@@ -2,10 +2,10 @@ import Foundation
 
 /// Fetches usage limits from the Claude API using the OAuth token from the macOS Keychain
 /// (falling back to ~/.claude/.credentials.json). Caches results to ~/.clawdboard/usage-limits.json
-/// to avoid rate limits across restarts. Polls every 10 minutes.
+/// to avoid rate limits across restarts. Polls every 5 minutes.
 public class UsageLimitsWatcher {
-    private static let pollInterval: TimeInterval = 600
-    private static let minFetchInterval: TimeInterval = 600
+    private static let pollInterval: TimeInterval = 300
+    private static let minFetchInterval: TimeInterval = 300
     private static let apiURL = "https://api.anthropic.com/api/oauth/usage"
     private static let credentialsFile = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".claude/.credentials.json")

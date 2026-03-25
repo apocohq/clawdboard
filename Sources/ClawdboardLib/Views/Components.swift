@@ -439,14 +439,14 @@ private struct PRClosedIcon: View {
 
 // MARK: - Sparkline View
 
-/// Miniature activity chart showing context usage rate over a 2-hour window.
-/// Plots context_pct deltas per minute bucket — peaks = active generation, flat = idle.
+/// Miniature activity chart showing context usage rate over a 30-minute window.
+/// Plots context_pct deltas per 30-second bucket — peaks = active generation, flat = idle.
 public struct SparklineView: View {
     public let snapshots: [ContextSnapshot]
     public var approvalTimestamps: [Date] = []
 
-    private static let windowMinutes = 120
-    private static let bucketCount = 60  // one bucket per 2 minutes
+    private static let windowMinutes = 30
+    private static let bucketCount = 60  // one bucket per 30 seconds
     private static let redrawInterval: TimeInterval = 30
 
     /// Periodic tick to force redraw so the time window slides even when no new data arrives.
@@ -524,7 +524,7 @@ public struct SparklineView: View {
         .onReceive(timer) { _ in tick.toggle() }
     }
 
-    /// Compute activity (context_pct delta) per 2-minute bucket over the last 2 hours.
+    /// Compute activity (context_pct delta) per 30-second bucket over the last 30 minutes.
     private var activityBuckets: [Double] {
         guard snapshots.count >= 2 else { return [] }
 
@@ -533,7 +533,7 @@ public struct SparklineView: View {
             -Double(Self.windowMinutes * 60))
         let bucketDuration = Double(Self.windowMinutes * 60) / Double(Self.bucketCount)
 
-        // Filter to last 2 hours
+        // Filter to last 30 minutes
         let recent = snapshots.filter { $0.t >= windowStart }
         guard recent.count >= 2 else { return [] }
 

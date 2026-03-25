@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
-from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -26,67 +24,8 @@ LOG_FILE = Path.home() / ".clawdboard" / "hook-debug.log"
 MODEL_CACHE_FILE = Path.home() / ".clawdboard" / "model-context-windows.json"
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
-TITLE_PLACEHOLDERS = [
-    "new-session",
-    "getting-started",
-    "loading...",
-    "spinning-up",
-    "warming-up",
-    "initializing",
-    "booting-up",
-    "revving-up",
-]
-
-# Whimsical fallback titles when AI title generation fails (Claude-style)
-
-_TITLE_ADJECTIVES = [
-    "caffeinated",
-    "wandering",
-    "cosmic",
-    "turbo",
-    "electric",
-    "quantum",
-    "galloping",
-    "hypersonic",
-    "neon",
-    "interstellar",
-    "volcanic",
-    "supersonic",
-    "midnight",
-    "chromatic",
-    "orbital",
-    "fizzy",
-    "turbulent",
-    "galactic",
-    "velvet",
-    "sparkling",
-]
-_TITLE_ANIMALS = [
-    "quokka",
-    "platypus",
-    "pangolin",
-    "capybara",
-    "narwhal",
-    "wombat",
-    "axolotl",
-    "otter",
-    "tardigrade",
-    "corgi",
-    "penguin",
-    "sloth",
-    "flamingo",
-    "hedgehog",
-    "raccoon",
-    "chameleon",
-    "lemur",
-    "puffin",
-    "ocelot",
-    "ibex",
-]
-
-TITLE_FALLBACKS = list(
-    f"{adj}-{animal}" for adj, animal in product(_TITLE_ADJECTIVES, _TITLE_ANIMALS)
-)
+TITLE_FALLBACK = "untitled-session"
+TITLE_PLACEHOLDERS = ("", "new-session", TITLE_FALLBACK)
 
 
 def get_context_window(model_id: str) -> int:
@@ -472,39 +411,34 @@ def write_state(state_file: Path, state: JsonDict) -> None:
     tmp.rename(state_file)
 
 
-_TITLE_SYSTEM_PROMPT = (
-    "Generate a 1-4 word kebab-case slug summarizing the topic of the user messages. "
-    "Rules: lowercase, hyphens between words, no explanation, no commentary. "
-    "Always generate a slug, even if the topic is not about coding. "
-    "Examples: api-refactor, ant-habitats, shark-biology, fix-login, db-migration, "
-    "gorilla-facts, perf-tuning, tree-species, dep-upgrade, recipe-ideas. "
-    "Output ONLY the slug."
-)
-
 _TITLE_SCRIPT = """\
-import json, os, re, signal, subprocess, random
+import json, os, re, signal, subprocess
 from pathlib import Path
 
 state_file = Path(os.environ["_CLAWDBOARD_STATE_FILE"])
 prompts = json.loads(os.environ["_CLAWDBOARD_PROMPTS"])
-fallbacks = json.loads(os.environ["_CLAWDBOARD_TITLE_FALLBACKS"])
-system_prompt = os.environ["_CLAWDBOARD_TITLE_SYSTEM_PROMPT"]
 
-claude_prompt = "\\n".join(f"Message {i+1}: {p}" for i, p in enumerate(prompts))
+messages = "\\n".join(f"Message {i+1}: {p}" for i, p in enumerate(prompts))
+claude_prompt = (
+    "Generate a kebab-case slug title (1-3 words, max 5 words) for this coding session. "
+    "Output ONLY the slug, nothing else. No greetings, no explanation.\\n"
+    "Examples: api-refactor, auth-module, test-suite, docs-update, cleanup, "
+    "fix-login, db-migration, general-chat, session-start\\n\\n"
+    f"{messages}\\n\\nSlug:"
+)
 
 title = ""
 try:
     proc = subprocess.Popen(
         ["claude", "-p", "--model", "haiku", "--no-session-persistence",
-         "--system-prompt", system_prompt, "--tools", "",
-         "--output-format", "text", "--max-budget-usd", "0.05",
+         "--tools", "", "--output-format", "text", "--max-budget-usd", "0.05",
          claude_prompt],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL, text=True,
         start_new_session=True,
     )
     try:
-        stdout, _ = proc.communicate(timeout=15)
+        stdout, _ = proc.communicate(timeout=30)
         if proc.returncode == 0 and stdout:
             text = stdout.strip()
             if not text.lower().startswith("error"):
@@ -513,11 +447,12 @@ try:
                 slug = re.sub(r"-{2,}", "-", slug).strip("-")
                 if slug:
                     words = slug.split("-")
-                    title = words[0]
-                    for word in words[1:]:
-                        if len(title) + len(word) + 1 > 40:
-                            break
-                        title += "-" + word
+                    if len(words) <= 5:
+                        title = words[0]
+                        for word in words[1:]:
+                            if len(title) + len(word) + 1 > 40:
+                                break
+                            title += "-" + word
     except subprocess.TimeoutExpired:
         # Kill the entire process group to avoid orphaned children
         try:
@@ -531,15 +466,12 @@ try:
 except Exception:
     pass
 
-# Fall back to a whimsical name
-if not title and fallbacks:
-    idx = random.choice(range(len(fallbacks)))
-    title = fallbacks[idx]
+if not title:
+    title = "untitled-session"
 
 try:
     state = json.loads(state_file.read_text())
-    if title:
-        state["title"] = title
+    state["title"] = title
     state.pop("title_generating", None)
     tmp = state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2))
@@ -564,8 +496,6 @@ def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
     env["_CLAWDBOARD_TITLE_GEN"] = "1"
     env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
     env["_CLAWDBOARD_PROMPTS"] = json.dumps(user_prompts)
-    env["_CLAWDBOARD_TITLE_FALLBACKS"] = json.dumps(TITLE_FALLBACKS)
-    env["_CLAWDBOARD_TITLE_SYSTEM_PROMPT"] = _TITLE_SYSTEM_PROMPT
     subprocess.Popen(
         [sys.executable, "-c", _TITLE_SCRIPT],
         stdin=subprocess.DEVNULL,
@@ -774,15 +704,13 @@ def handle_user_prompt_submit(
     # Generate title on message 1 (quick) and message 2 (refined)
     # Message 2 only re-triggers if the title is still a placeholder
     # (i.e. message 1's async generation hasn't finished yet)
-    title_is_placeholder = state.get("title", "") in ("", *TITLE_PLACEHOLDERS)
+    title_is_placeholder = state.get("title", "") in TITLE_PLACEHOLDERS
     should_generate = count in (1, 2) and prompts
     if should_generate and (
         (count == 2 and title_is_placeholder)
         or (count == 1 and not state.get("title_generating"))
     ):
         state["title_generating"] = True
-        if not state.get("title"):
-            state["title"] = random.choice(TITLE_PLACEHOLDERS)
         merge_transcript_data(state, data)
         if cwd_changed:
             _reapply_git_info(state, new_branch, new_repo)
