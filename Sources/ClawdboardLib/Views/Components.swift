@@ -445,7 +445,7 @@ public struct SparklineView: View {
     public let snapshots: [ContextSnapshot]
     public var approvalTimestamps: [Date] = []
 
-    private static let windowMinutes = 30
+    private static let windowMinutes = 60
     private static let bucketCount = 60  // one bucket per 30 seconds
     private static let redrawInterval: TimeInterval = 30
 
@@ -524,7 +524,7 @@ public struct SparklineView: View {
         .onReceive(timer) { _ in tick.toggle() }
     }
 
-    /// Compute activity (context_pct delta) per 30-second bucket over the last 30 minutes.
+    /// Compute activity (context_pct delta) per bucket over the last 60 minutes.
     private var activityBuckets: [Double] {
         guard snapshots.count >= 2 else { return [] }
 
@@ -533,7 +533,7 @@ public struct SparklineView: View {
             -Double(Self.windowMinutes * 60))
         let bucketDuration = Double(Self.windowMinutes * 60) / Double(Self.bucketCount)
 
-        // Filter to last 30 minutes
+        // Filter to last 60 minutes
         let recent = snapshots.filter { $0.t >= windowStart }
         guard recent.count >= 2 else { return [] }
 
