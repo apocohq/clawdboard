@@ -676,16 +676,33 @@ public struct DetailRow: View {
 
 // MARK: - Cursor Rect
 
+/// NSView that uses `addCursorRect` to reliably set the pointing-hand cursor.
+/// Unlike `NSCursor.push()`/`pop()` in `.onHover`, cursor rects are managed by
+/// AppKit's tracking system and handle nested views correctly.
+private class PointingHandCursorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func resetCursorRects() {
+        discardCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
+/// Wraps `PointingHandCursorView` for use in SwiftUI.
+struct PointingHandCursor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = PointingHandCursorView()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.window?.invalidateCursorRects(for: nsView)
+    }
+}
+
 extension View {
-    /// Adds a pointing-hand cursor when hovering over this view.
+    /// Adds a pointing-hand cursor when hovering over this view, using AppKit cursor rects.
     func pointingHandCursor(enabled: Bool = true) -> some View {
-        onHover { hovering in
-            guard enabled else { return }
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        overlay(enabled ? PointingHandCursor() : nil)
     }
 }

@@ -51,7 +51,6 @@ public struct SessionsTab: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .pointingHandCursor()
                     .padding(.leading, 8)
                     .padding(.trailing, 4)
                     .padding(.top, group.key == groups.first?.key ? 0 : 10)

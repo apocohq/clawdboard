@@ -109,7 +109,6 @@ public struct AgentRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .pointingHandCursor()
                 .help(isExpanded ? "Collapse" : "Expand")
 
             }
