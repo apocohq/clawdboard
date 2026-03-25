@@ -54,7 +54,7 @@ run = """
 #!/bin/bash
 set -euo pipefail
 swift format format --in-place --recursive Sources/ Tests/
-ruff format Sources/ClawdboardLib/Resources/ scripts/
+ruff format Sources/ClawdboardLib/Resources/ scripts/ Tests/python
 """
 
 [tasks.lint]
