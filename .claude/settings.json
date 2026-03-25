@@ -1,4 +1,8 @@
 {
+  "attribution": {
+    "commit": "Assisted-By: Claude (Anthropic AI) <noreply@anthropic.com>",
+    "pr": ""
+  },
   "allowedTools": [
     "Bash(mise run build*)",
     "Bash(mise run test*)",

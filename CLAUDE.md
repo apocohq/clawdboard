@@ -32,6 +32,14 @@ mise run lint     # Check formatting + lint
 
 - **`docs/DESIGN.md`** is the design manual — colors, typography, layout constants, icons, animations, and every visual component. **Before making any UI/design changes, consult this document first, discuss the change, and update `docs/DESIGN.md` to reflect the new state.** Code and design doc must stay in sync.
 
+## Commit Conventions
+
+- **Conventional Commits**: `type(scope): short summary` — types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `revert`, `style`, `perf`, `ci`, `build`.
+- **Scope**: Optional but encouraged (e.g., `feat(ui):`, `fix(hook):`, `docs(design):`).
+- **Body**: Optional concise bullet points for non-trivial changes.
+- **Trailer**: Configured via `.claude/settings.json` `attribution` — do not add manually.
+- **Branch naming**: `type/short-description` (e.g., `feat/session-history`, `fix/stale-timer`). Same type prefixes as commits.
+
 ## Key Paths
 
 - `Sources/ClawdboardLib/Resources/clawdboard-hook.py` — Python script installed as Claude hook
