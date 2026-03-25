@@ -17,8 +17,7 @@
 
 </div>
 
-<!-- Add screenshot/GIF of the menu bar dropdown here -->
-<!-- <p align="center"><img src="assets/screenshot.png" width="600" alt="5 agents. One glance." /></p> -->
+<p align="center"><img src="assets/demo.gif" width="640" alt="Clawdboard demo" /></p>
 
 ---
 
