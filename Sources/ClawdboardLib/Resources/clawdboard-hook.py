@@ -423,7 +423,7 @@ claude_prompt = (
     "Generate a kebab-case slug title (1-3 words, max 5 words) for this coding session. "
     "Output ONLY the slug, nothing else. No greetings, no explanation.\\n"
     "Examples: api-refactor, auth-module, test-suite, docs-update, cleanup, "
-    "fix-login, db-migration, general-chat, session-start\\n\\n"
+    "fix-login, db-migration, general-chat, config-update\\n\\n"
     f"{messages}\\n\\nSlug:"
 )
 
@@ -590,8 +590,8 @@ def handle_session_start(
         "commit_count": 0,
         "unpushed_count": get_unpushed_count(cwd),
     }
-    # Always seed a baseline snapshot so the sparkline renders from the first update
-    append_context_snapshot(state, data.get("context_pct", 0), now)
+    if data.get("context_pct") is not None:
+        append_context_snapshot(state, data["context_pct"], now)
     write_state(state_file, state)
 
 
