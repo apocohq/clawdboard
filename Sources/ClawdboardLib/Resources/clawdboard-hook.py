@@ -660,8 +660,8 @@ def handle_session_start(
         "commit_count": 0,
         "unpushed_count": get_unpushed_count(cwd),
     }
-    if data.get("context_pct") is not None:
-        append_context_snapshot(state, data["context_pct"], now)
+    # Always seed a baseline snapshot so the sparkline renders from the first update
+    append_context_snapshot(state, data.get("context_pct", 0), now)
     write_state(state_file, state)
 
 
