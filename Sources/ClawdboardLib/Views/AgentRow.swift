@@ -39,70 +39,60 @@ public struct AgentRow: View {
             // Main row
             HStack(spacing: 8) {
                 // Tappable content area (opens/focuses session)
-                HStack(spacing: 8) {
-                    StatusDot(status: session.displayStatus)
+                Button(action: onActivate) {
+                    HStack(spacing: 8) {
+                        StatusDot(status: session.displayStatus)
 
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(session.displayTitle)
-                            .font(.system(.body, weight: .medium))
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(session.displayTitle)
+                                .font(.system(.body, weight: .medium))
+                                .lineLimit(1)
 
-                        HStack(spacing: 4) {
-                            if let host = session.remoteHost {
-                                Image(systemName: "network")
-                                    .font(.caption2)
-                                Text(host)
-                                Text("·")
-                            }
-                            Text(session.displayStatus.displayLabel)
-                                .frame(width: 56, alignment: .leading)
-                            if session.isHookTracked {
-                                if let branch = session.gitBranch {
-                                    if let compareUrl = session.compareUrl,
-                                        let url = URL(string: compareUrl)
-                                    {
-                                        Link(destination: url) {
-                                            Text(branch)
-                                                .lineLimit(1)
-                                                .truncationMode(.middle)
-                                        }
-                                        .layoutPriority(-1)
-                                        .pointingHandCursor()
-                                    } else {
+                            HStack(spacing: 4) {
+                                if let host = session.remoteHost {
+                                    Image(systemName: "network")
+                                        .font(.caption2)
+                                    Text(host)
+                                    Text("·")
+                                }
+                                Text(session.displayStatus.displayLabel)
+                                    .frame(width: 56, alignment: .leading)
+                                if session.isHookTracked {
+                                    if let branch = session.gitBranch {
                                         Text(branch)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
                                             .layoutPriority(-1)
                                     }
+                                    // Diff stats shown in expanded details only
                                 }
-                                // Diff stats shown in expanded details only
                             }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
 
-                    Spacer()
+                        Spacer()
 
-                    HStack(spacing: 12) {
-                        SparklineView(
-                            snapshots: session.contextSnapshots ?? [],
-                            approvalTimestamps: session.approvalTimestamps ?? []
-                        )
-                        PRStatusIcon(
-                            prInfo: session.prInfo,
-                            commitCount: session.commitCount,
-                            unpushedCount: session.unpushedCount,
-                            commitCompareUrl: session.commitCompareUrl,
-                            isDirty: session.gitDirty == true
-                        )
+                        HStack(spacing: 12) {
+                            SparklineView(
+                                snapshots: session.contextSnapshots ?? [],
+                                approvalTimestamps: session.approvalTimestamps ?? []
+                            )
+                            PRStatusIcon(
+                                prInfo: session.prInfo,
+                                commitCount: session.commitCount,
+                                unpushedCount: session.unpushedCount,
+                                commitCompareUrl: session.commitCompareUrl,
+                                isDirty: session.gitDirty == true
+                            )
+                        }
+                        .fixedSize()
                     }
-                    .fixedSize()
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
                 .pointingHandCursor()
-                .onTapGesture { onActivate() }
 
                 Button(action: onToggle) {
                     Image(
