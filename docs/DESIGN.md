@@ -480,6 +480,14 @@ Within each status group, sessions are grouped alphabetically by GitHub repo slu
 
 ---
 
+## Cursor Behavior
+
+The **pointing hand cursor** (`.pointingHandCursor()`) is used only for custom interactive elements in the session list — clickable rows, inline links, and custom icon buttons. Standard macOS controls (buttons, toggles, menus, pickers) in the **footer** and **settings window** use the default arrow cursor to match native macOS behavior (e.g. System Settings).
+
+Implementation uses `NSCursor.pointingHand.push()` / `.pop()` in an `.onHover` handler (defined in `Components.swift`). The cursor-rect approach (`addCursorRect`) does not work reliably in `MenuBarExtra` windows.
+
+---
+
 ## Platform Behavior
 
 Clawdboard must respect standard macOS behaviors. Never hardcode values that the system provides dynamically.

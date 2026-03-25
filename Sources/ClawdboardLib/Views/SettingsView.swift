@@ -68,6 +68,7 @@ public struct SettingsView: View {
                         .foregroundStyle(.secondary)
                     }
                 }
+
             }
 
             Section("Notifications") {
@@ -176,36 +177,27 @@ public struct SettingsView: View {
             }
 
             Section("Usage Limits") {
-                HStack {
-                    Text("Show ring indicator above")
-                    Spacer()
-                    Picker("", selection: $usageRingThreshold) {
-                        Text("Always").tag(0)
-                        Text("25%").tag(25)
-                        Text("50%").tag(50)
-                        Text("75%").tag(75)
-                        Text("Never").tag(101)
-                    }
-                    .frame(width: 100)
+                Picker("Show ring indicator above", selection: $usageRingThreshold) {
+                    Text("Always").tag(0)
+                    Text("25%").tag(25)
+                    Text("50%").tag(50)
+                    Text("75%").tag(75)
+                    Text("Never").tag(101)
                 }
-                .font(.caption)
+
             }
 
             Section("Cleanup") {
-                HStack {
-                    Text("Auto-delete idle sessions after")
-                    Spacer()
-                    Picker("", selection: $autoDeleteHours) {
-                        Text("Never").tag(0.0)
-                        Text("1 hour").tag(1.0)
-                        Text("2 hours").tag(2.0)
-                        Text("4 hours").tag(4.0)
-                        Text("8 hours").tag(8.0)
-                        Text("12 hours").tag(12.0)
-                        Text("24 hours").tag(24.0)
-                    }
-                    .frame(width: 120)
+                Picker("Auto-delete idle sessions after", selection: $autoDeleteHours) {
+                    Text("Never").tag(0.0)
+                    Text("1 hour").tag(1.0)
+                    Text("2 hours").tag(2.0)
+                    Text("4 hours").tag(4.0)
+                    Text("8 hours").tag(8.0)
+                    Text("12 hours").tag(12.0)
+                    Text("24 hours").tag(24.0)
                 }
+
             }
 
             Section("About") {
@@ -318,6 +310,7 @@ public struct SettingsView: View {
             Image(systemName: "plus")
         }
         .menuStyle(.borderlessButton)
+        .pointingHandCursor()
         .fixedSize()
     }
 
