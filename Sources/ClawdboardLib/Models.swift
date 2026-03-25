@@ -425,11 +425,6 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         return model
     }
 
-    /// Number of active subagents
-    public var activeSubagentCount: Int {
-        subagents?.count ?? 0
-    }
-
     /// Time elapsed since session started
     public var elapsedTime: String {
         guard let started = startedAt else { return "—" }

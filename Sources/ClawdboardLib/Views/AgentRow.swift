@@ -77,12 +77,6 @@ public struct AgentRow: View {
                                 }
                                 // Diff stats shown in expanded details only
                             }
-                            if session.activeSubagentCount > 0 {
-                                Text("·")
-                                Text(
-                                    "\(session.activeSubagentCount) subagent\(session.activeSubagentCount == 1 ? "" : "s")"
-                                )
-                            }
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
