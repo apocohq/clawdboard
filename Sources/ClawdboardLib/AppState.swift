@@ -478,6 +478,9 @@ public class AppState {
     public func focusIDESession(_ session: AgentSession) {
         guard let lock = ideLockInfo(for: session) else { return }
 
+        // Hide Clawdboard so it doesn't overlap the target app.
+        NSApp.hide(nil)
+
         // Use workspace folder from lock file, fall back to session cwd.
         let folderPath = lock.workspaceFolders.first ?? session.cwd
         guard !folderPath.isEmpty else { return }
@@ -491,10 +494,19 @@ public class AppState {
             ? (Self.findCodeWorkspace(in: folderPath) ?? folderPath)
             : folderPath
 
+        // Capture for JetBrains terminal tab focus via AX
+        let tabTitle = session.terminalTabTitle
+        let ideName = lock.ideName
+
         if let executablePath = Self.findIDEExecutable(command: command, family: family) {
             Self.runProcess(executablePath, arguments: [targetPath])
             if family == .jetbrains {
-                Self.activateJetBrainsTerminal()
+                if let tabTitle = tabTitle {
+                    // Skip ⌥F12 — focusJetBrainsTerminalTab will open it if needed.
+                    Self.focusJetBrainsTerminalTab(ideName: ideName, tabTitle: tabTitle)
+                } else {
+                    Self.activateJetBrainsTerminal()
+                }
             }
             return
         }
@@ -503,7 +515,11 @@ public class AppState {
         if family == .jetbrains {
             Self.runProcess("/usr/bin/open", arguments: ["-a", lock.ideName, targetPath]) { status in
                 if status == 0 {
-                    Self.activateJetBrainsTerminal()
+                    if let tabTitle = tabTitle {
+                        Self.focusJetBrainsTerminalTab(ideName: ideName, tabTitle: tabTitle)
+                    } else {
+                        Self.activateJetBrainsTerminal()
+                    }
                 } else {
                     DispatchQueue.main.async {
                         Self.showIDECLIAlert(command: command, family: .jetbrains)
@@ -542,13 +558,69 @@ public class AppState {
 
     /// Send ⌥F12 to the frontmost JetBrains IDE to activate the Terminal tool window.
     private static func activateJetBrainsTerminal() {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
-            let script = """
-                tell application "System Events"
-                    key code 111 using {option down}
-                end tell
-                """
-            Self.runProcess("/usr/bin/osascript", arguments: ["-e", script])
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
+            Self.sendOptionF12()
+        }
+    }
+
+    /// Send ⌥F12 synchronously via AppleScript. Must be called from a background thread.
+    private static func sendOptionF12() {
+        let script = """
+            tell application "System Events"
+                key code 111 using {option down}
+            end tell
+            """
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", script]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
+        task.waitUntilExit()
+    }
+
+    /// Find the running JetBrains IDE application by its display name.
+    private static func findJetBrainsApp(ideName: String) -> NSRunningApplication? {
+        let lower = ideName.lowercased()
+        return NSWorkspace.shared.runningApplications.first { app in
+            guard app.activationPolicy == .regular else { return false }
+            if let name = app.localizedName?.lowercased() {
+                return name.contains(lower) || lower.contains(name)
+            }
+            return false
+        }
+    }
+
+    /// Find and click the terminal tab matching the session's title.
+    /// If the Terminal tool window is closed (tab not found), sends ⌥F12 to open it and retries.
+    private static func focusJetBrainsTerminalTab(ideName: String, tabTitle: String) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
+            guard let app = Self.findJetBrainsApp(ideName: ideName) else {
+                debugLog("[JB] Could not find running IDE for '\(ideName)'")
+                return
+            }
+            let pid = app.processIdentifier
+            app.activate()
+            Thread.sleep(forTimeInterval: 0.1)
+
+            debugLog("[JB] Searching AX tree for tab '\(tabTitle)' in pid=\(pid)")
+            let found = AccessibilityHelper.findAndActivateElement(
+                pid: pid,
+                titleContaining: tabTitle,
+                maxDepth: 15
+            )
+
+            if !found {
+                // Terminal tool window is likely closed — open it with ⌥F12 and retry.
+                debugLog("[JB] Tab not found, sending ⌥F12 to open Terminal tool window")
+                Self.sendOptionF12()
+                Thread.sleep(forTimeInterval: 0.2)
+                AccessibilityHelper.findAndActivateElement(
+                    pid: pid,
+                    titleContaining: tabTitle,
+                    maxDepth: 15
+                )
+            }
         }
     }
 

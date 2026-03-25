@@ -299,6 +299,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// PR status for this session's branch (fetched Swift-side via `gh` CLI, not persisted)
     public var prInfo: PRInfo?
 
+    /// Terminal tab title set via ANSI escape, used for JetBrains AX tab focus
+    public var terminalTabTitle: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -328,6 +331,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case contextSnapshots = "context_snapshots"
         case approvalTimestamps = "approval_timestamps"
         case prInfo = "pr_info"
+        case terminalTabTitle = "terminal_tab_title"
     }
 
     public init(
@@ -358,7 +362,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         deletions: Int? = nil,
         contextSnapshots: [ContextSnapshot]? = nil,
         approvalTimestamps: [Date]? = nil,
-        prInfo: PRInfo? = nil
+        prInfo: PRInfo? = nil,
+        terminalTabTitle: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -388,6 +393,7 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.contextSnapshots = contextSnapshots
         self.approvalTimestamps = approvalTimestamps
         self.prInfo = prInfo
+        self.terminalTabTitle = terminalTabTitle
     }
 
     /// Display title: AI-generated slug title, or generic fallback
