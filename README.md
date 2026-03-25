@@ -102,6 +102,6 @@ Swift 6 · SwiftUI · macOS native · [Claude Code Hooks API](https://docs.anthr
 
 <div align="center">
 
-MIT License · [Website](https://clawdboard.com) · Built for [Claude Code](https://claude.ai/code)
+MIT License · [Website](https://clawdboard.dev) · Built for [Claude Code](https://claude.ai/code)
 
 </div>
