@@ -50,10 +50,10 @@ You're running five agents. One needs approval. Two are stuck. **Clawdboard sits
 Open Claude Code anywhere and run:
 
 ```
-/setup-clawdboard
+/clawdboard:install
 ```
 
-That's it. Builds the app, installs it, configures hooks, and sets up your IDE integration, all in one go.
+That's it. Installs the app via Homebrew, configures hooks, and sets up your IDE integration, all in one go.
 
 *Yes, you use Claude Code to set up your Claude Code manager. We know.*
 
