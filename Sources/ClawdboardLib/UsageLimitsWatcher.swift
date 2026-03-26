@@ -277,13 +277,19 @@ public class UsageLimitsWatcher {
     }
 
     private static func buildWindow(
-        utilization: Double, resetsAt: String, windowHours: Int, now: Date
+        utilization: Double, resetsAt: String?, windowHours: Int, now: Date
     ) -> UsageLimitWindow {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let resetDate =
-            formatter.date(from: resetsAt)
-            ?? ISO8601DateFormatter().date(from: resetsAt) ?? now
+        let resetDate: Date
+        if let resetsAt {
+            resetDate =
+                formatter.date(from: resetsAt)
+                ?? ISO8601DateFormatter().date(from: resetsAt) ?? now
+        } else {
+            // No reset time when usage is 0 — assume full window remaining
+            resetDate = now.addingTimeInterval(Double(windowHours) * 3600)
+        }
 
         let windowMs = Double(windowHours) * 3600 * 1000
         let startDate = resetDate.addingTimeInterval(-Double(windowHours) * 3600)
