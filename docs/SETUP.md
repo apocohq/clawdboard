@@ -1,8 +1,10 @@
 # Getting the Most Out of Clawdboard
 
-Clawdboard monitors your Claude Code sessions from the macOS menu bar. The easiest way to set everything up is to open Claude Code anywhere and run:
+Clawdboard monitors your Claude Code sessions from the macOS menu bar. The easiest way to set everything up is to open Claude Code and run:
 
 ```
+/plugins marketplace add apocohq/claude-plugins
+/plugins install clawdboard@apoco-plugins
 /clawdboard:install
 ```
 
