@@ -47,17 +47,20 @@ You're running five agents. One needs approval. Two are stuck. **Clawdboard sits
 
 ## Get started
 
-Open Claude Code anywhere and run:
+Open Claude Code and run these commands:
 
 ```
-/setup-clawdboard
+/plugins marketplace add apocohq/claude-plugins
+/plugins install clawdboard@apoco-plugins
+/reload-plugins
+/clawdboard:install
 ```
 
-That's it. Builds the app, installs it, configures hooks, and sets up your IDE integration, all in one go.
+That's it. Installs the app via Homebrew, configures hooks, and sets up your IDE integration.
 
 *Yes, you use Claude Code to set up your Claude Code manager. We know.*
 
-> See the [Setup Guide](docs/SETUP.md) for manual installation and details on what gets configured.
+> See the [Setup Guide](docs/SETUP.md) for details on what gets configured and manual installation.
 
 ## How it works
 

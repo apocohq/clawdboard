@@ -25,5 +25,16 @@
     "Bash(gh pr list*)",
     "Bash(gh pr create*)",
     "Bash(gh issue create*)"
-  ]
+  ],
+  "extraKnownMarketplaces": {
+    "apoco-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "apocohq/claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "clawdboard@apoco-plugins": true
+  }
 }
