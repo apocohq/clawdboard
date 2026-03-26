@@ -1,6 +1,28 @@
 # Getting the Most Out of Clawdboard
 
-Clawdboard monitors your Claude Code sessions from the macOS menu bar. The easiest way to set everything up is to open Claude Code and run:
+Clawdboard monitors your Claude Code sessions from the macOS menu bar. There are three ways to get started:
+
+### Option 1: Homebrew
+
+```bash
+brew install apocohq/clawdboard/clawdboard
+open /Applications/Clawdboard.app
+```
+
+Then open Claude Code in the Clawdboard repo and run `/setup-clawdboard` to configure hooks and IDE integration.
+
+To upgrade: `brew upgrade clawdboard`
+
+### Option 2: Build from source
+
+```bash
+git clone https://github.com/apocohq/clawdboard.git
+cd clawdboard
+```
+
+Then open Claude Code and run `/setup-clawdboard` — it builds the app, installs hooks, and sets up your IDE.
+
+### Option 3: Plugin marketplace
 
 ```
 /plugins marketplace add apocohq/claude-plugins
@@ -9,7 +31,7 @@ Clawdboard monitors your Claude Code sessions from the macOS menu bar. The easie
 /clawdboard:install
 ```
 
-This installs the app via Homebrew, configures hooks, and sets up your IDE — all automatically.
+All three options configure hooks and set up your IDE automatically.
 
 The rest of this document explains what gets configured and how to do it manually.
 

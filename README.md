@@ -8,7 +8,6 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/platform-macOS-black.svg)]()
-[![Swift 6](https://img.shields.io/badge/Swift-6-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/apocohq/clawdboard?style=social)](https://github.com/apocohq/clawdboard/stargazers)
 
 <!-- 🚀 Product Hunt badge goes here after launch -->
@@ -47,7 +46,27 @@ You're running five agents. One needs approval. Two are stuck. **Clawdboard sits
 
 ## Get started
 
-Open Claude Code and run these commands:
+### Option 1: Homebrew
+
+```bash
+brew install apocohq/clawdboard/clawdboard
+open /Applications/Clawdboard.app
+```
+
+Then open Claude Code in the Clawdboard repo and run `/setup-clawdboard` to configure hooks and IDE integration.
+
+To upgrade: `brew upgrade clawdboard`
+
+### Option 2: Build from source
+
+```bash
+git clone https://github.com/apocohq/clawdboard.git
+cd clawdboard
+```
+
+Then open Claude Code and run `/setup-clawdboard` — it builds the app, installs hooks, and sets up your IDE.
+
+### Option 3: Plugin marketplace
 
 ```
 /plugins marketplace add apocohq/claude-plugins
@@ -55,8 +74,6 @@ Open Claude Code and run these commands:
 /reload-plugins
 /clawdboard:install
 ```
-
-That's it. Installs the app via Homebrew, configures hooks, and sets up your IDE integration.
 
 *Yes, you use Claude Code to set up your Claude Code manager. We know.*
 
@@ -103,8 +120,4 @@ Swift 6 · SwiftUI · macOS native · [Claude Code Hooks API](https://docs.anthr
 
 ---
 
-<div align="center">
-
 MIT License · [Website](https://clawdboard.dev) · Built for [Claude Code](https://claude.ai/code)
-
-</div>
