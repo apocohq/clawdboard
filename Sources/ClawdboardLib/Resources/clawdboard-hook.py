@@ -27,6 +27,70 @@ LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_pric
 TITLE_FALLBACK = "untitled-session"
 TITLE_PLACEHOLDERS = ("", "new-session", TITLE_FALLBACK)
 
+STATUS_PREFIX = {
+    "working": "\U0001f535",  # 🔵
+    "pending_waiting": "\U0001f535",  # 🔵 (shows as working)
+    "needs_approval": "\U0001f534",  # 🔴
+    "waiting": "\U0001f7e2",  # 🟢
+    "abandoned": "\u26aa",  # ⚪
+    "unknown": "\u26aa",  # ⚪
+}
+DEFAULT_PREFIX = "\u26aa"  # ⚪
+
+
+def set_terminal_title(title: str) -> None:
+    """Set the terminal tab title via ANSI OSC escape sequence.
+
+    Writes directly to /dev/tty to bypass stdout (which goes to Claude Code).
+    """
+    try:
+        with open("/dev/tty", "w") as tty:
+            tty.write(f"\033]0;{title}\007")
+            tty.flush()
+    except (OSError, IOError):
+        pass  # Not in a terminal (e.g. title gen subprocess)
+
+
+def _status_prefix(state: JsonDict) -> str:
+    return STATUS_PREFIX.get(state.get("status", ""), DEFAULT_PREFIX)
+
+
+def _title_body(state: JsonDict) -> str:
+    """Return the title text part (without status prefix)."""
+    title = state.get("title", "")
+    if title and title not in TITLE_PLACEHOLDERS:
+        return title
+    slug = state.get("slug", "")
+    if slug and slug not in TITLE_PLACEHOLDERS:
+        return slug
+    project = state.get("project_name", "")
+    if project:
+        return project
+    return "session"
+
+
+def get_terminal_tab_title(state: JsonDict) -> str:
+    """Compute the terminal tab title from session state.
+
+    Format: {status_emoji} {title}
+    Status emoji: 🔵 working, 🔴 needs approval, 🟢 waiting, ⚪ other
+    Title priority: AI-generated title > slug > project name > 'session'.
+    """
+    return f"{_status_prefix(state)} {_title_body(state)}"
+
+
+def update_terminal_tab_title(state: JsonDict) -> None:
+    """Recompute and set the terminal tab title if it changed.
+
+    Skips if the user renamed the tab manually.
+    """
+    if state.get("user_renamed_tab"):
+        return
+    new_title = get_terminal_tab_title(state)
+    if new_title != state.get("terminal_tab_title"):
+        state["terminal_tab_title"] = new_title
+        set_terminal_title(new_title)
+
 
 def get_context_window(model_id: str) -> int:
     """Look up context window size for a model from cached LiteLLM data.
@@ -336,6 +400,7 @@ def main() -> None:
     elif hook_event == "Notification":
         handle_notification(state_file, notification_subtype, now)
     elif hook_event == "SessionEnd":
+        set_terminal_title("")
         state_file.unlink(missing_ok=True)
     elif hook_event == "PermissionRequest":
         handle_permission_request(state_file, now)
@@ -491,6 +556,23 @@ try:
     state = json.loads(state_file.read_text())
     state["title"] = title
     state.pop("title_generating", None)
+    # Recompute terminal tab title with status-based prefix
+    if not state.get("user_renamed_tab"):
+        status_map = {
+            "working": "\U0001f535", "pending_waiting": "\U0001f535",
+            "needs_approval": "\U0001f534", "waiting": "\U0001f7e2",
+        }
+        prefix = status_map.get(state.get("status", ""), "\u26aa")
+        placeholders = ("", "new-session", "untitled-session")
+        body = title if (title and title not in placeholders) else state.get("project_name", "session")
+        tab_title = f"{prefix} {body}"
+        state["terminal_tab_title"] = tab_title
+        try:
+            with open("/dev/tty", "w") as tty:
+                tty.write(f"\\033]0;{tab_title}\\007")
+                tty.flush()
+        except (OSError, IOError):
+            pass
     tmp = state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2))
     tmp.rename(state_file)
@@ -509,7 +591,11 @@ def extract_prompt_first_line(prompt: str, max_len: int = 200) -> str | None:
 
 
 def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
-    """Spawn a detached process to generate a session title via claude CLI."""
+    """Spawn a detached process to generate a session title via claude CLI.
+
+    Does NOT use start_new_session so the subprocess inherits the controlling
+    terminal and can set the tab title via /dev/tty immediately.
+    """
     env = os.environ.copy()
     env["_CLAWDBOARD_TITLE_GEN"] = "1"
     env["_CLAWDBOARD_STATE_FILE"] = str(state_file)
@@ -520,7 +606,6 @@ def generate_title_async(state_file: Path, user_prompts: list[str]) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         env=env,
-        start_new_session=True,
     )
 
 
@@ -633,6 +718,9 @@ def handle_session_start(
     }
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
+
+    update_terminal_tab_title(state)
+
     write_state(state_file, state)
 
 
@@ -664,6 +752,7 @@ def handle_post_tool_use(
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
     update_commit_tracking(state, cwd or state.get("cwd", ""))
+    update_terminal_tab_title(state)
     write_state(state_file, state)
 
 
@@ -678,6 +767,7 @@ def handle_stop(state_file: Path, transcript_path: str, now: str) -> None:
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
     update_commit_tracking(state, state.get("cwd", ""))
+    update_terminal_tab_title(state)
     write_state(state_file, state)
 
 
@@ -732,6 +822,7 @@ def handle_user_prompt_submit(
         if data.get("context_pct") is not None:
             append_context_snapshot(state, data["context_pct"], now)
         update_commit_tracking(state, cwd or state.get("cwd", ""))
+        update_terminal_tab_title(state)
         write_state(state_file, state)
         generate_title_async(state_file, prompts)
         return
@@ -742,6 +833,7 @@ def handle_user_prompt_submit(
     if data.get("context_pct") is not None:
         append_context_snapshot(state, data["context_pct"], now)
     update_commit_tracking(state, cwd or state.get("cwd", ""))
+    update_terminal_tab_title(state)
     write_state(state_file, state)
 
 

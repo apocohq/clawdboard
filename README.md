@@ -37,7 +37,7 @@ You're running five agents. One needs approval. Two are stuck. **Clawdboard sits
 **Get there in one click**
 - Focus in iTerm2: jumps to the exact terminal pane
 - Focus in VS Code: opens the right workspace window
-- Focus in JetBrains: opens the project, activates terminal
+- Focus in JetBrains: opens the project, clicks the exact terminal tab
 
 **Works how you work**
 - Remote host monitoring via SSH
@@ -78,6 +78,16 @@ Then open Claude Code and run `/clawdboard:install` — it builds the app, insta
 *Yes, you use Claude Code to set up your Claude Code manager. We know.*
 
 > See the [Setup Guide](docs/SETUP.md) for details on what gets configured and manual installation.
+
+### JetBrains terminal tab focus
+
+For Clawdboard to focus the exact terminal tab in JetBrains IDEs, two things are needed:
+
+1. **Disable Claude Code's built-in terminal title** — add to your `~/.bashrc` or `~/.zshrc`:
+   ```bash
+   export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+   ```
+2. **Install the [Terminal Tab Tailor](https://plugins.jetbrains.com/plugin/23903-terminal-tab-tailor) plugin** in your JetBrains IDE — this propagates ANSI title escapes to the tab name.
 
 ## How it works
 
