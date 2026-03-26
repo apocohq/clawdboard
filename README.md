@@ -52,6 +52,7 @@ Open Claude Code and run these commands:
 ```
 /plugins marketplace add apocohq/claude-plugins
 /plugins install clawdboard@apoco-plugins
+/reload-plugins
 /clawdboard:install
 ```
 

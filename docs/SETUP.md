@@ -5,6 +5,7 @@ Clawdboard monitors your Claude Code sessions from the macOS menu bar. The easie
 ```
 /plugins marketplace add apocohq/claude-plugins
 /plugins install clawdboard@apoco-plugins
+/reload-plugins
 /clawdboard:install
 ```
 
