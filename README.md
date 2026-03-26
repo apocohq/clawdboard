@@ -53,7 +53,7 @@ brew install apocohq/clawdboard/clawdboard
 open /Applications/Clawdboard.app
 ```
 
-Then open Claude Code in the Clawdboard repo and run `/setup-clawdboard` to configure hooks and IDE integration.
+The hooks are set up automatically when the app runs for the first time.
 
 To upgrade: `brew upgrade clawdboard`
 
@@ -64,7 +64,7 @@ git clone https://github.com/apocohq/clawdboard.git
 cd clawdboard
 ```
 
-Then open Claude Code and run `/setup-clawdboard` — it builds the app, installs hooks, and sets up your IDE.
+Then open Claude Code and run `/clawdboard:install` — it builds the app, installs hooks, and sets up your IDE.
 
 ### Option 3: Plugin marketplace
 
