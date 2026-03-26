@@ -31,6 +31,7 @@ public class AppState {
     private var usageLimitsWatcher: UsageLimitsWatcher?
     private var diffStatsProvider: DiffStatsProvider?
     private var prStatusProvider: PRStatusProvider?
+    private var terminalTabPoller: TerminalTabPoller?
 
     /// Remote sessions keyed by host identifier
     private var remoteSessions: [String: [AgentSession]] = [:]
@@ -65,6 +66,9 @@ public class AppState {
     public func start() {
         startDiffStatsProvider()
         startPRStatusProvider()
+        terminalTabPoller = TerminalTabPoller { [weak self] sessionId, newTitle in
+            self?.handleTerminalTabRenamed(sessionId: sessionId, newTitle: newTitle)
+        }
 
         stateWatcher = SessionStateWatcher { [weak self] hookSessions in
             self?.localSessions = hookSessions
@@ -346,6 +350,7 @@ public class AppState {
         sessions = all
         refreshDiffStatsProviderTargets()
         refreshPRStatusProviderTargets()
+        terminalTabPoller?.pruneExcept(activeSessionIds: Set(all.map(\.id)))
 
         if shouldPlayAlert {
             AlertSoundManager.shared.play()
@@ -497,13 +502,13 @@ public class AppState {
         // Capture for JetBrains terminal tab focus via AX
         let tabTitle = session.terminalTabTitle
         let ideName = lock.ideName
+        let sessionId = session.id
 
         if let executablePath = Self.findIDEExecutable(command: command, family: family) {
             Self.runProcess(executablePath, arguments: [targetPath])
             if family == .jetbrains {
                 if let tabTitle = tabTitle {
-                    // Skip ⌥F12 — focusJetBrainsTerminalTab will open it if needed.
-                    Self.focusJetBrainsTerminalTab(ideName: ideName, tabTitle: tabTitle)
+                    focusJetBrainsTerminalTab(sessionId: sessionId, ideName: ideName, tabTitle: tabTitle)
                 } else {
                     Self.activateJetBrainsTerminal()
                 }
@@ -516,7 +521,8 @@ public class AppState {
             Self.runProcess("/usr/bin/open", arguments: ["-a", lock.ideName, targetPath]) { status in
                 if status == 0 {
                     if let tabTitle = tabTitle {
-                        Self.focusJetBrainsTerminalTab(ideName: ideName, tabTitle: tabTitle)
+                        self.focusJetBrainsTerminalTab(
+                            sessionId: sessionId, ideName: ideName, tabTitle: tabTitle)
                     } else {
                         Self.activateJetBrainsTerminal()
                     }
@@ -593,7 +599,18 @@ public class AppState {
 
     /// Find and click the terminal tab matching the session's title.
     /// If the Terminal tool window is closed (tab not found), sends ⌥F12 to open it and retries.
-    private static func focusJetBrainsTerminalTab(ideName: String, tabTitle: String) {
+    /// Tracks the found element for rename detection via `terminalTabPoller`.
+    private func focusJetBrainsTerminalTab(sessionId: String, ideName: String, tabTitle: String) {
+        // Strip the status emoji prefix (e.g. "🔵 general-chat" → "general-chat")
+        // so the AX search matches regardless of which status dot is currently showing.
+        let searchTitle: String
+        if let spaceIndex = tabTitle.firstIndex(of: " ") {
+            searchTitle = String(tabTitle[tabTitle.index(after: spaceIndex)...])
+        } else {
+            searchTitle = tabTitle
+        }
+
+        let poller = self.terminalTabPoller
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
             guard let app = Self.findJetBrainsApp(ideName: ideName) else {
                 debugLog("[JB] Could not find running IDE for '\(ideName)'")
@@ -603,25 +620,53 @@ public class AppState {
             app.activate()
             Thread.sleep(forTimeInterval: 0.1)
 
-            debugLog("[JB] Searching AX tree for tab '\(tabTitle)' in pid=\(pid)")
-            let found = AccessibilityHelper.findAndActivateElement(
+            debugLog("[JB] Searching AX tree for tab '\(searchTitle)' in pid=\(pid)")
+            var result = AccessibilityHelper.findAndActivateElement(
                 pid: pid,
-                titleContaining: tabTitle,
+                titleContaining: searchTitle,
                 maxDepth: 15
             )
 
-            if !found {
-                // Terminal tool window is likely closed — open it with ⌥F12 and retry.
+            if !result.success {
                 debugLog("[JB] Tab not found, sending ⌥F12 to open Terminal tool window")
                 Self.sendOptionF12()
                 Thread.sleep(forTimeInterval: 0.2)
-                AccessibilityHelper.findAndActivateElement(
+                result = AccessibilityHelper.findAndActivateElement(
                     pid: pid,
-                    titleContaining: tabTitle,
+                    titleContaining: searchTitle,
                     maxDepth: 15
                 )
             }
+
+            if let element = result.element {
+                poller?.track(sessionId: sessionId, element: element)
+            }
         }
+    }
+
+    /// Handle a terminal tab rename detected by the poller.
+    /// Updates the session state file so the new title is used for future AX searches.
+    private func handleTerminalTabRenamed(sessionId: String, newTitle: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        sessions[index].terminalTabTitle = newTitle
+
+        // Write the updated title + user_renamed_tab flag back to the session state file.
+        let sessionsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".clawdboard/sessions")
+        let stateFile = sessionsDir.appendingPathComponent("\(sessionId).json")
+        guard
+            var json = try? JSONSerialization.jsonObject(
+                with: Data(contentsOf: stateFile)) as? [String: Any]
+        else { return }
+
+        json["terminal_tab_title"] = newTitle
+        json["user_renamed_tab"] = true
+        if let data = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
+            let tmp = stateFile.appendingPathExtension("tmp")
+            try? data.write(to: tmp)
+            try? FileManager.default.moveItem(at: tmp, to: stateFile)
+        }
+        debugLog("[JB] Tab renamed for session \(sessionId): \"\(newTitle)\"")
     }
 
     /// Search standard paths for a CLI executable, returning the first match.

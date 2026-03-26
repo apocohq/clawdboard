@@ -12,24 +12,30 @@ public enum AccessibilityHelper {
         return AXIsProcessTrustedWithOptions(options)
     }
 
-    /// Search a running application's AX tree for an element whose title or value
-    /// contains the given search string, and perform kAXPressAction on it.
-    /// Returns true if the element was found and activated.
+    /// Result of an AX search-and-activate operation.
+    public struct ActivateResult {
+        public let success: Bool
+        public let element: AXUIElement?
+    }
+
+    /// Search a running application's AX tree for an element whose AXValue
+    /// contains the given search string, and click it via CGEvent.
+    /// Returns the result including the matched AXUIElement for later polling.
     @discardableResult
     public static func findAndActivateElement(
         pid: pid_t,
         titleContaining searchString: String,
         maxDepth: Int = 12
-    ) -> Bool {
+    ) -> ActivateResult {
         let trusted = isTrusted()
         debugLog("[AX] findAndActivateElement pid=\(pid) search=\"\(searchString)\" trusted=\(trusted)")
-        guard trusted else { return false }
+        guard trusted else { return ActivateResult(success: false, element: nil) }
 
         let appElement = AXUIElementCreateApplication(pid)
         guard let target = findElement(root: appElement, titleContaining: searchString, maxDepth: maxDepth)
         else {
             debugLog("[AX] No element found matching \"\(searchString)\"")
-            return false
+            return ActivateResult(success: false, element: nil)
         }
 
         let role = stringAttribute(kAXRoleAttribute as String, from: target) ?? "?"
@@ -38,7 +44,14 @@ public enum AccessibilityHelper {
 
         // Use CGEvent click directly. kAXPressAction returns success on JetBrains
         // AXStaticText but is a no-op, so we skip it entirely.
-        return clickElement(target)
+        let clicked = clickElement(target)
+        return ActivateResult(success: clicked, element: clicked ? target : nil)
+    }
+
+    /// Read the current AXValue from a previously found element.
+    /// Returns nil if the element is stale (tab closed/recreated).
+    public static func readValue(of element: AXUIElement) -> String? {
+        stringAttribute(kAXValueAttribute as String, from: element)
     }
 
     // MARK: - Private
