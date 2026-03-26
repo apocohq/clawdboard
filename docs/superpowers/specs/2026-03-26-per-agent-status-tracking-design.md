@@ -24,52 +24,60 @@ Empirically verified (test session `9b8189e8`):
 
 A single `status` field per session gets overwritten by concurrent agents. Subagent A's `PermissionRequest` is clobbered when the main agent fires `PreToolUse`.
 
-### 3. Long-running tool staleness
+### 3. Long-running tools after approval
 
-The 15-second staleness heuristic (`working → waiting`) fires during legitimate long-running tools.
+After the user approves a permission dialog, no hook fires until PostToolUse (after the tool completes). For slow tools (e.g. `sleep 20`), this means 20+ seconds stuck at "approve" status.
 
-## Solution: `pending_tool_use_id` Correlation
+### 4. Resumed sessions show "working"
 
-One mechanism handles all three problems.
+When a session is resumed, `SessionStart` fires but Claude may already be idle. No Stop hook fires because the model never ran, leaving the status stuck at "working".
 
-**Core idea:** Every tool call has a unique `tool_use_id`. The hook stores it on PreToolUse. The transcript records the resolution (completion or rejection) against the same ID. By matching IDs, we can precisely detect when a tool was resolved — even when no hook fires.
+## Solution
 
 ### Per-Agent State
 
 Each agent (main + subagents) tracks its own:
-- `status` — current status
+- `status` — current agent status
 - `pending_tool_use_id` — set by PreToolUse, cleared by PostToolUse/Stop
+- `pending_tool_command` — the shell command from PermissionRequest (for process matching)
 - `transcript_path` — path to the agent's transcript file
 
-The session-level `status` is computed from all agents for backward compatibility.
+The session-level `status` is derived from all agents via `recompute_session_status`.
 
 ### Hook Changes (Python)
 
-Route all status-changing events by `agent_id`. Store `pending_tool_use_id` from PreToolUse. Helper functions:
+All status-changing events are routed by `agent_id`. Key helpers:
 
 ```python
 def _set_agent_status(state, agent_id, status):
-    """Set status for the correct agent (main or subagent)."""
+    """Set status for the correct agent AND recompute session-level status."""
     if agent_id:
         for sub in state.get("subagents", []):
             if sub["agent_id"] == agent_id:
                 sub["status"] = status
-                return
+                break
     else:
         state["main_agent_status"] = status
+    recompute_session_status(state)  # Always recompute to prevent race conditions
 
 def _set_pending_tool(state, agent_id, tool_use_id):
-    """Set or clear pending_tool_use_id for the correct agent."""
+    """Set or clear pending_tool_use_id (and pending_tool_command) for the correct agent."""
     if agent_id:
         for sub in state.get("subagents", []):
             if sub["agent_id"] == agent_id:
                 sub["pending_tool_use_id"] = tool_use_id
+                if not tool_use_id:
+                    sub.pop("pending_tool_command", None)
                 return
     else:
         state["main_pending_tool_use_id"] = tool_use_id
+        if not tool_use_id:
+            state.pop("pending_tool_command", None)
 
 def recompute_session_status(state):
-    """Derive session-level status from all agents."""
+    """Derive session-level status from all agents.
+    Priority: needs_approval > working > pending_waiting > waiting.
+    Required because multiple agents write concurrently."""
     statuses = [state.get("main_agent_status", "working")]
     for sub in state.get("subagents", []):
         s = sub.get("status")
@@ -86,33 +94,70 @@ def recompute_session_status(state):
         state["status"] = "waiting"
     else:
         state["status"] = state.get("main_agent_status", "unknown")
-
-    # Compute session-level pending flag
-    any_pending = bool(state.get("main_pending_tool_use_id"))
-    for sub in state.get("subagents", []):
-        if sub.get("pending_tool_use_id"):
-            any_pending = True
-            break
-    state["has_pending_tool"] = any_pending
 ```
 
 Event routing:
 
 | Event | What it does |
 |---|---|
+| SessionStart | `status=waiting`, `main_agent_status=waiting`, store `transcript_path` |
+| UserPromptSubmit | `status=working` (main agent only, triggers recompute) |
 | PreToolUse | `status=working`, `pending_tool_use_id=hook_input["tool_use_id"]` |
-| PermissionRequest | `status=needs_approval` (pending_tool_use_id stays — tool hasn't resolved) |
+| PermissionRequest | `status=needs_approval`, store `pending_tool_command` from `tool_input["command"]` |
 | PostToolUse / PostToolUseFailure | `status=working`, `pending_tool_use_id=None` |
 | Stop | `status=pending_waiting`, `pending_tool_use_id=None` |
-| StopFailure (NEW) | `status=pending_waiting`, `pending_tool_use_id=None` |
-| UserPromptSubmit | `status=working` (main agent only) |
-| Notification:permission_prompt | `status=needs_approval` (unless already working) |
-| Notification:idle_prompt | `status=pending_waiting` (unless already working) |
-| SubagentStart | Append to subagents with `transcript_path` from `agent_transcript_path` |
+| StopFailure | `status=pending_waiting`, `pending_tool_use_id=None` |
+| SubagentStart | Append to subagents with `status=working`, `transcript_path` |
 | SubagentStop | Remove from subagents, call `recompute_session_status()` |
-| SessionStart | Set `main_agent_status=working`, store `transcript_path` |
 
-All handlers call `recompute_session_status()` after updating per-agent state.
+**Removed:** Notification handlers (idle_prompt, permission_prompt) — empirically unreliable, redundant with PermissionRequest and Stop.
+
+**Race condition fix:** `write_state` uses PID in temp file suffix to prevent concurrent hook invocations from clobbering each other: `tmp = state_file.with_suffix(f".tmp.{os.getpid()}")`.
+
+### Swift: SessionProcessor
+
+All state computation logic is extracted into `SessionProcessor` (from AppState). It is the single source of truth for deriving display-ready session state.
+
+```swift
+public func process(_ session: AgentSession, now: Date) -> AgentSession? {
+    var s = session
+
+    // Filter ghost sessions (never produced output)
+    if isGhost(s, now: now) { return nil }
+
+    // Derive session status from per-agent data
+    s.status = deriveStatus(s)
+
+    guard let updatedAt = s.updatedAt else { return s }
+    let age = now.timeIntervalSince(updatedAt)
+
+    // Resolve blind spots where hooks don't fire
+    if age >= 2.0 {
+        resolveViaTranscript(&s)
+    }
+    if s.status == .needsApproval {
+        resolveViaProcessInspection(&s)
+    }
+
+    // Debounce: pending_waiting → waiting after 1.5s
+    if s.status == .pendingWaiting, age >= 1.5 {
+        s.status = .waiting
+    }
+
+    // Abandoned: waiting for 10+ minutes
+    if s.status == .waiting, age >= 600.0 {
+        s.status = .abandoned
+    }
+
+    return s
+}
+```
+
+**Transcript resolution:** When a `pending_tool_use_id` is present and status hasn't changed for >2s, reads the last 4KB of each agent's transcript looking for a `tool_result` entry matching the ID. Detects rejections via `"User rejected tool use"` or `"Request interrupted by user"`.
+
+**Process inspection:** When status is `needs_approval` and a `pending_tool_command` is stored, enumerates child + grandchild processes via `sysctl(KERN_PROC_ALL)` and reads their command-line args via `sysctl(KERN_PROCARGS2)`. If the exact command is found running, transitions to `working`. This handles the blind spot after permission approval where no hook fires until the tool completes.
+
+**No 15s staleness heuristic.** The Stop hook reliably handles the `working → pending_waiting` transition. The old fallback was removed because it caused false "your turn" states during legitimate long-running tools.
 
 ### Session JSON Shape
 
@@ -121,7 +166,7 @@ All handlers call `recompute_session_status()` after updating per-agent state.
   "status": "needs_approval",
   "main_agent_status": "needs_approval",
   "main_pending_tool_use_id": "toolu_01Wwv6w7xX85ZkKW97zHseWm",
-  "has_pending_tool": true,
+  "pending_tool_command": "ls -la /tmp",
   "transcript_path": "/Users/x/.claude/projects/proj/session.jsonl",
   "subagents": [
     {
@@ -136,161 +181,21 @@ All handlers call `recompute_session_status()` after updating per-agent state.
 }
 ```
 
-### Swift Changes
+## Files Modified
 
-**New model fields** (all optional for backward compat):
-
-Subagent: `status: AgentStatus?`, `pendingToolUseId: String?`, `transcriptPath: String?`
-
-AgentSession: `mainAgentStatus: AgentStatus?`, `mainPendingToolUseId: String?`, `hasPendingTool: Bool?`, `transcriptPath: String?`
-
-**processSession() changes:**
-
-```swift
-private func processSession(_ session: AgentSession, now: Date) -> AgentSession? {
-    var s = session
-
-    // ... existing ghost filtering (unchanged) ...
-
-    if let updatedAt = s.updatedAt {
-        let age = now.timeIntervalSince(updatedAt)
-
-        // NEW: Reactive transcript check for pending tools.
-        // When a tool_use_id is pending and status hasn't changed for >2s,
-        // check the transcript for a resolution (completion or rejection).
-        if age >= 2.0 {
-            var changed = false
-
-            // Check main agent
-            if let toolId = s.mainPendingToolUseId, !toolId.isEmpty,
-               let tp = s.transcriptPath {
-                if let resolution = checkToolResolution(transcriptPath: tp, toolUseId: toolId) {
-                    s.mainAgentStatus = resolution.isRejection ? .waiting : .working
-                    s.mainPendingToolUseId = nil
-                    changed = true
-                }
-            }
-
-            // Check each subagent
-            if var subs = s.subagents {
-                for i in subs.indices {
-                    if let toolId = subs[i].pendingToolUseId, !toolId.isEmpty,
-                       let tp = subs[i].transcriptPath {
-                        if let resolution = checkToolResolution(transcriptPath: tp, toolUseId: toolId) {
-                            subs[i].status = resolution.isRejection ? .waiting : .working
-                            subs[i].pendingToolUseId = nil
-                            changed = true
-                        }
-                    }
-                }
-                if changed { s.subagents = subs }
-            }
-
-            if changed {
-                s.status = computeSessionStatus(s)
-                s.hasPendingTool = hasAnyPendingTool(s)
-            }
-        }
-
-        // Existing debounce (unchanged)
-        if s.status == .pendingWaiting, age >= 1.5 {
-            s.status = .waiting
-        }
-
-        // MODIFIED: Staleness with pending-tool awareness
-        if s.status == .working, age >= 15.0 {
-            if s.hasPendingTool == true {
-                // Tool is legitimately running — use 10-minute timeout
-                if age >= 600.0 { s.status = .waiting }
-            } else {
-                s.status = .waiting
-            }
-        }
-
-        // Existing abandoned logic (unchanged)
-        if s.status == .waiting, age >= 600.0 {
-            s.status = .abandoned
-        }
-    }
-    return s
-}
-```
-
-**Transcript resolution check:**
-
-```swift
-struct ToolResolution {
-    let isRejection: Bool
-}
-
-/// Read last ~4KB of transcript, look for a tool_result matching the given tool_use_id.
-func checkToolResolution(transcriptPath: String, toolUseId: String) -> ToolResolution? {
-    guard let handle = FileHandle(forReadingAtPath: transcriptPath) else { return nil }
-    defer { handle.closeFile() }
-
-    let fileSize = handle.seekToEndOfFile()
-    let readSize = min(UInt64(4096), fileSize)
-    handle.seek(toFileOffset: fileSize - readSize)
-    let data = handle.readData(ofLength: Int(readSize))
-
-    guard let text = String(data: data, encoding: .utf8) else { return nil }
-
-    // Find complete JSON lines containing this tool_use_id as a tool_result
-    // The tool_result entry has: "tool_use_id":"<id>" (in message.content)
-    // The tool_use entry has: "id":"<id>" (in message.content)
-    // We want the tool_result, which uses "tool_use_id" key.
-    let lines = text.components(separatedBy: "\n")
-    for line in lines.reversed() {
-        guard line.contains(toolUseId),
-              line.contains("tool_use_id") else { continue }
-
-        // This line references our tool as a result
-        let isRejection = line.contains("User rejected tool use")
-                       || line.contains("Request interrupted by user")
-        return ToolResolution(isRejection: isRejection)
-    }
-    return nil  // Tool hasn't resolved yet
-}
-```
-
-**Status computation:**
-
-```swift
-func computeSessionStatus(_ session: AgentSession) -> AgentStatus {
-    var statuses: [AgentStatus] = []
-    if let main = session.mainAgentStatus { statuses.append(main) }
-    for sub in session.subagents ?? [] {
-        if let s = sub.status { statuses.append(s) }
-    }
-    if statuses.contains(.needsApproval) { return .needsApproval }
-    if statuses.contains(.working) { return .working }
-    if statuses.contains(.pendingWaiting) { return .pendingWaiting }
-    return session.mainAgentStatus ?? session.status
-}
-```
-
-## Files to Modify
-
-1. **`Sources/ClawdboardLib/Resources/clawdboard-hook.py`** — per-agent routing, `pending_tool_use_id` tracking, `recompute_session_status()`, `transcript_path` storage, StopFailure handler
-2. **`Sources/ClawdboardLib/Models.swift`** — new fields on Subagent and AgentSession
-3. **`Sources/ClawdboardLib/AppState.swift`** — `checkToolResolution()`, updated `processSession()`
-4. **Hook registration** — add `StopFailure` event matcher
+1. **`Sources/ClawdboardLib/Resources/clawdboard-hook.py`** — per-agent routing, `_set_agent_status` / `_set_pending_tool` / `recompute_session_status` helpers, `pending_tool_command` storage, StopFailure handler, PID-based temp file, removed Notification handlers
+2. **`Sources/ClawdboardLib/SessionProcessor.swift`** (NEW) — extracted from AppState, single source of truth for state computation, transcript resolution, process inspection via sysctl
+3. **`Sources/ClawdboardLib/Models.swift`** — new fields on Subagent (`status`, `pendingToolUseId`, `pendingToolCommand`, `transcriptPath`) and AgentSession (`mainAgentStatus`, `mainPendingToolUseId`, `pendingToolCommand`, `hasPendingTool`, `transcriptPath`)
+4. **`Sources/ClawdboardLib/AppState.swift`** — simplified to delegate to SessionProcessor
+5. **`Sources/ClawdboardLib/HookManager.swift`** — added `StopFailure` to hook events, removed Notification registration
 
 ## Performance
 
-- Transcript read: ~4KB read from end of file, only for sessions with a pending tool_use_id older than 2s. Typical: 0-2 sessions at any time. Cost: <1ms per read on SSD.
+- Transcript read: ~4KB from end of file, only for sessions with a pending `tool_use_id` older than 2s. Typical: 0-2 sessions. Cost: <1ms per read on SSD.
+- Process inspection: only runs when status is `needs_approval` with a `pending_tool_command`. Uses `sysctl` (kernel call, no shell subprocess).
 - No reads when all tools are auto-approved (pending_tool_use_id cleared immediately by PostToolUse).
 - Per-agent status computation: O(n) where n = subagent count (0-5 typical).
 
 ## Backward Compatibility
 
 All new fields are optional. Existing state files work without migration. The first hook event after upgrade populates the new fields. Python helpers use `.get()` with sensible defaults.
-
-## Verification
-
-1. **Unit test**: Session with `pending_tool_use_id` and a transcript containing a matching rejection → verify `processSession()` transitions correctly.
-2. **Unit test**: Session with `pending_tool_use_id` but no matching transcript entry → verify status stays unchanged.
-3. **Unit test**: Session with `has_pending_tool=true` at 20s age → verify staleness suppressed.
-4. **Build**: `mise run build`
-5. **Manual test**: Run a Claude session, reject a tool, verify Clawdboard transitions within ~5s.
-6. **Manual test**: Run concurrent subagents, reject one subagent's tool, verify the other's status is unaffected.
