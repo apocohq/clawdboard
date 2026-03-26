@@ -189,11 +189,19 @@ public struct Subagent: Codable, Equatable, Identifiable {
     public let agentId: String
     public let agentType: String
     public let startedAt: Date?
+    public var status: AgentStatus?
+    public var pendingToolUseId: String?
+    public var pendingToolCommand: String?
+    public var transcriptPath: String?
 
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
         case agentType = "agent_type"
         case startedAt = "started_at"
+        case status
+        case pendingToolUseId = "pending_tool_use_id"
+        case pendingToolCommand = "pending_tool_command"
+        case transcriptPath = "transcript_path"
     }
 }
 
@@ -302,6 +310,21 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     /// Terminal tab title set via ANSI escape, used for JetBrains AX tab focus
     public var terminalTabTitle: String?
 
+    /// Main agent's own status (separate from computed session status)
+    public var mainAgentStatus: AgentStatus?
+
+    /// The tool_use_id of a pending tool call for the main agent
+    public var mainPendingToolUseId: String?
+
+    /// The shell command of the pending tool (for process matching)
+    public var pendingToolCommand: String?
+
+    /// Whether any agent (main or subagent) has a pending tool call
+    public var hasPendingTool: Bool?
+
+    /// Path to the session's transcript JSONL file
+    public var transcriptPath: String?
+
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -332,6 +355,11 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case approvalTimestamps = "approval_timestamps"
         case prInfo = "pr_info"
         case terminalTabTitle = "terminal_tab_title"
+        case mainAgentStatus = "main_agent_status"
+        case mainPendingToolUseId = "main_pending_tool_use_id"
+        case pendingToolCommand = "pending_tool_command"
+        case hasPendingTool = "has_pending_tool"
+        case transcriptPath = "transcript_path"
     }
 
     public init(
@@ -363,7 +391,12 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         contextSnapshots: [ContextSnapshot]? = nil,
         approvalTimestamps: [Date]? = nil,
         prInfo: PRInfo? = nil,
-        terminalTabTitle: String? = nil
+        terminalTabTitle: String? = nil,
+        mainAgentStatus: AgentStatus? = nil,
+        mainPendingToolUseId: String? = nil,
+        pendingToolCommand: String? = nil,
+        hasPendingTool: Bool? = nil,
+        transcriptPath: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -394,6 +427,11 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.approvalTimestamps = approvalTimestamps
         self.prInfo = prInfo
         self.terminalTabTitle = terminalTabTitle
+        self.mainAgentStatus = mainAgentStatus
+        self.mainPendingToolUseId = mainPendingToolUseId
+        self.pendingToolCommand = pendingToolCommand
+        self.hasPendingTool = hasPendingTool
+        self.transcriptPath = transcriptPath
     }
 
     /// Display title: AI-generated slug title, or generic fallback
