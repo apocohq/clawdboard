@@ -483,12 +483,16 @@ public class AppState {
     public func focusIDESession(_ session: AgentSession) {
         guard let lock = ideLockInfo(for: session) else { return }
 
-        // Hide Clawdboard so it doesn't overlap the target app.
+        // Hide Clawdboard so it doesn't overlap the AX click targets.
+        // For the detached floating window we restore it once the operation finishes.
         NSApp.hide(nil)
 
         // Use workspace folder from lock file, fall back to session cwd.
         let folderPath = lock.workspaceFolders.first ?? session.cwd
-        guard !folderPath.isEmpty else { return }
+        guard !folderPath.isEmpty else {
+            Self.restoreFloatingWindow()
+            return
+        }
 
         let family = Self.ideFamily(for: lock.ideName)
         let command = Self.cliCommand(for: lock.ideName)
@@ -516,6 +520,8 @@ public class AppState {
                 } else {
                     Self.activateJetBrainsTerminal()
                 }
+            } else {
+                Self.restoreFloatingWindow()
             }
             return
         }
@@ -531,6 +537,7 @@ public class AppState {
                         Self.activateJetBrainsTerminal()
                     }
                 } else {
+                    Self.restoreFloatingWindow()
                     DispatchQueue.main.async {
                         Self.showIDECLIAlert(command: command, family: .jetbrains)
                     }
@@ -539,6 +546,7 @@ public class AppState {
             return
         }
 
+        Self.restoreFloatingWindow()
         DispatchQueue.main.async {
             Self.showIDECLIAlert(command: command, family: family)
         }
@@ -566,10 +574,25 @@ public class AppState {
         return task
     }
 
+    /// Restore the detached floating window after a focus operation hid the app.
+    /// No-op when the floating window is not active.
+    private static func restoreFloatingWindow() {
+        DispatchQueue.main.async {
+            guard UserDefaults.standard.bool(forKey: "showFloatingWindow") else { return }
+            NSApp.unhide(nil)
+            // Re-assert floating level on the detached window (unhide resets it).
+            for window in NSApp.windows
+            where window.title == "Clawdboard" && window.isVisible {
+                window.level = .floating
+            }
+        }
+    }
+
     /// Send ⌥F12 to the frontmost JetBrains IDE to activate the Terminal tool window.
     private static func activateJetBrainsTerminal() {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
             Self.sendOptionF12()
+            Self.restoreFloatingWindow()
         }
     }
 
@@ -621,6 +644,7 @@ public class AppState {
 
         let poller = self.terminalTabPoller
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
+            defer { Self.restoreFloatingWindow() }
             guard let app = Self.findIDEApp(ideName: ideName) else {
                 debugLog("[JB] Could not find running IDE for '\(ideName)'")
                 return
@@ -724,6 +748,7 @@ public class AppState {
     /// 4. Find the session button whose title starts with the aiTitle and click it
     private func focusVSCodeSession(sessionId: String, cwd: String, ideName: String) {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
+            defer { Self.restoreFloatingWindow() }
             guard let aiTitle = Self.readAITitle(cwd: cwd, sessionId: sessionId) else {
                 debugLog("[VSCode] No aiTitle — cannot focus session")
                 return
