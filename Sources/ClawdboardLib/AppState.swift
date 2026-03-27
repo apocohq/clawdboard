@@ -504,9 +504,13 @@ public class AppState {
         let ideName = lock.ideName
         let sessionId = session.id
 
+        let cwd = session.cwd
+
         if let executablePath = Self.findIDEExecutable(command: command, family: family) {
             Self.runProcess(executablePath, arguments: [targetPath])
-            if family == .jetbrains {
+            if family == .vscode {
+                focusVSCodeSession(sessionId: sessionId, cwd: cwd, ideName: ideName)
+            } else if family == .jetbrains {
                 if let tabTitle = tabTitle {
                     focusJetBrainsTerminalTab(sessionId: sessionId, ideName: ideName, tabTitle: tabTitle)
                 } else {
@@ -569,13 +573,8 @@ public class AppState {
         }
     }
 
-    /// Send ⌥F12 synchronously via AppleScript. Must be called from a background thread.
-    private static func sendOptionF12() {
-        let script = """
-            tell application "System Events"
-                key code 111 using {option down}
-            end tell
-            """
+    /// Run an AppleScript snippet synchronously. Must be called from a background thread.
+    private static func runAppleScript(_ script: String) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         task.arguments = ["-e", script]
@@ -585,8 +584,18 @@ public class AppState {
         task.waitUntilExit()
     }
 
-    /// Find the running JetBrains IDE application by its display name.
-    private static func findJetBrainsApp(ideName: String) -> NSRunningApplication? {
+    /// Send ⌥F12 synchronously via AppleScript. Must be called from a background thread.
+    private static func sendOptionF12() {
+        runAppleScript(
+            """
+            tell application "System Events"
+                key code 111 using {option down}
+            end tell
+            """)
+    }
+
+    /// Find a running IDE application by its display name.
+    private static func findIDEApp(ideName: String) -> NSRunningApplication? {
         let lower = ideName.lowercased()
         return NSWorkspace.shared.runningApplications.first { app in
             guard app.activationPolicy == .regular else { return false }
@@ -612,7 +621,7 @@ public class AppState {
 
         let poller = self.terminalTabPoller
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
-            guard let app = Self.findJetBrainsApp(ideName: ideName) else {
+            guard let app = Self.findIDEApp(ideName: ideName) else {
                 debugLog("[JB] Could not find running IDE for '\(ideName)'")
                 return
             }
@@ -667,6 +676,104 @@ public class AppState {
             try? FileManager.default.moveItem(at: tmp, to: stateFile)
         }
         debugLog("[JB] Tab renamed for session \(sessionId): \"\(newTitle)\"")
+    }
+
+    // MARK: - VS Code Session Focus
+
+    /// Read the AI-generated title from a Claude Code JSONL transcript.
+    /// The VSCode extension writes `{"type":"ai-title","aiTitle":"..."}` entries.
+    /// We scan from the end since the entry appears after the first assistant response.
+    private static func readAITitle(cwd: String, sessionId: String) -> String? {
+        // Path: ~/.claude/projects/{cwd-with-slashes-as-dashes}/{sessionId}.jsonl
+        let projectDir = "-" + cwd.dropFirst().replacingOccurrences(of: "/", with: "-")
+        let jsonlPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects/\(projectDir)/\(sessionId).jsonl")
+
+        guard let data = try? Data(contentsOf: jsonlPath) else {
+            debugLog("[VSCode] Could not read JSONL at \(jsonlPath.path)")
+            return nil
+        }
+
+        // Scan backwards for the ai-title line (usually near the start, but scan from end for safety)
+        guard let content = String(data: data, encoding: .utf8) else { return nil }
+        let lines = content.components(separatedBy: "\n")
+        for line in lines.reversed() {
+            guard line.contains("\"ai-title\"") else { continue }
+            guard let lineData = line.data(using: .utf8),
+                let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                json["type"] as? String == "ai-title",
+                let aiTitle = json["aiTitle"] as? String
+            else { continue }
+            debugLog("[VSCode] Found aiTitle: \"\(aiTitle)\"")
+            return aiTitle
+        }
+        debugLog("[VSCode] No ai-title entry found in JSONL")
+        return nil
+    }
+
+    /// Focus a specific session in the VS Code Claude Code sidebar via Accessibility API.
+    ///
+    /// Flow:
+    /// 1. Read the VSCode-generated `aiTitle` from the JSONL transcript
+    /// 2. Enable Electron accessibility on the VS Code process
+    /// 3. Find and click the "Session history" button to open the session picker
+    /// 4. Find the session button whose title starts with the aiTitle and click it
+    private func focusVSCodeSession(sessionId: String, cwd: String, ideName: String) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
+            guard let aiTitle = Self.readAITitle(cwd: cwd, sessionId: sessionId) else {
+                debugLog("[VSCode] No aiTitle — cannot focus session")
+                return
+            }
+
+            guard let app = Self.findIDEApp(ideName: ideName) else {
+                debugLog("[VSCode] Could not find running IDE for '\(ideName)'")
+                return
+            }
+            let pid = app.processIdentifier
+
+            // Enable Electron accessibility tree (idempotent)
+            AccessibilityHelper.enableElectronAccessibility(pid: pid)
+
+            // Check if the current session already matches (avoid opening the picker needlessly)
+            if AccessibilityHelper.findButtonByTitlePrefix(pid: pid, titlePrefix: aiTitle) != nil {
+                debugLog("[VSCode] Session '\(aiTitle)' is already the active session")
+                return
+            }
+
+            // Click "Session history" to open the session picker
+            guard let historyBtn = AccessibilityHelper.findButton(pid: pid, description: "Session history")
+            else {
+                debugLog("[VSCode] 'Session history' button not found")
+                return
+            }
+
+            debugLog("[VSCode] Clicking 'Session history' button")
+            AccessibilityHelper.click(historyBtn)
+            Thread.sleep(forTimeInterval: 0.1)
+
+            // Find the session in the picker by aiTitle prefix
+            guard
+                let sessionBtn = AccessibilityHelper.findButtonByTitlePrefix(
+                    pid: pid, titlePrefix: aiTitle)
+            else {
+                debugLog("[VSCode] Session '\(aiTitle)' not found in picker — pressing Escape")
+                Self.sendEscape()
+                return
+            }
+
+            debugLog("[VSCode] Clicking session '\(aiTitle)'")
+            AccessibilityHelper.click(sessionBtn)
+        }
+    }
+
+    /// Send Escape key via AppleScript. Must be called from a background thread.
+    private static func sendEscape() {
+        runAppleScript(
+            """
+            tell application "System Events"
+                key code 53
+            end tell
+            """)
     }
 
     /// Search standard paths for a CLI executable, returning the first match.
