@@ -7,7 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 NOW = "2026-01-01T00:00:00Z"
-SUBAGENT = {"agent_id": "a1", "agent_type": "general", "started_at": "t"}
+
+
+def read_fact(hook, session_id, agent_id=""):
+    """Helper to read an agent fact file."""
+    return hook.read_agent_fact(session_id, agent_id)
 
 
 # -- Context window lookup --
@@ -137,9 +141,74 @@ class TestStateHelpers:
     def test_make_base_state(self, hook):
         state = hook.make_base_state("s1", "/home/user/proj", "proj", NOW, 1234)
         assert state["session_id"] == "s1"
-        assert state["status"] == "working"
         assert state["pid"] == 1234
         assert state["is_hook_tracked"] is True
+        # status is no longer in session JSON — derived from agent facts
+
+
+# -- Agent fact files --
+
+
+class TestAgentFacts:
+    def test_write_and_read_agent_fact(self, hook):
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        fact = read_fact(hook, "s1", "")
+        assert fact["status"] == "working"
+
+    def test_agent_fact_path_main(self, hook, tmp_sessions):
+        path = hook.agent_fact_path("s1", "")
+        assert path.name == "s1.agent.main.json"
+
+    def test_agent_fact_path_subagent(self, hook, tmp_sessions):
+        path = hook.agent_fact_path("s1", "agent-abc")
+        assert path.name == "s1.agent.agent-abc.json"
+
+    def test_derive_agent_status_needs_approval(self, hook):
+        fact = {"tools": {"t1": {"status": "working"}, "t2": {"status": "needs_approval"}}}
+        assert hook.derive_agent_status(fact) == "needs_approval"
+
+    def test_derive_agent_status_working(self, hook):
+        fact = {"tools": {"t1": {"status": "working"}}}
+        assert hook.derive_agent_status(fact) == "working"
+
+    def test_derive_agent_status_no_tools(self, hook):
+        fact = {"status": "waiting", "tools": {}}
+        assert hook.derive_agent_status(fact) == "waiting"
+
+    def test_derive_agent_status_no_tools_preserves_working(self, hook):
+        """Between tool calls, agent is still working even with no active tools."""
+        fact = {"status": "working", "tools": {}}
+        assert hook.derive_agent_status(fact) == "working"
+
+    def test_derive_agent_status_no_tools_preserves_needs_approval(self, hook):
+        """Only Stop sets waiting — derive never downgrades."""
+        fact = {"status": "needs_approval", "tools": {}}
+        assert hook.derive_agent_status(fact) == "needs_approval"
+
+    def test_delete_agent_fact_cleans_lock(self, hook, tmp_sessions):
+        hook.write_agent_fact("s1", "", {"status": "working"})
+        # Create a lock file
+        lock = hook.agent_fact_path("s1", "").with_suffix(".lock")
+        lock.write_text("")
+        hook.delete_agent_fact("s1", "")
+        assert not hook.agent_fact_path("s1", "").exists()
+        assert not lock.exists()
+
+    def test_delete_all_agent_facts(self, hook, tmp_sessions):
+        hook.write_agent_fact("s1", "", {"status": "working"})
+        hook.write_agent_fact("s1", "sub1", {"status": "working"})
+        # Create lock files
+        hook.agent_fact_path("s1", "").with_suffix(".lock").write_text("")
+        hook.agent_fact_path("s1", "sub1").with_suffix(".lock").write_text("")
+        hook.delete_all_agent_facts("s1")
+        assert not list(tmp_sessions.glob("s1.agent.*"))
+
+    def test_delete_subagent_facts_keeps_main(self, hook, tmp_sessions):
+        hook.write_agent_fact("s1", "", {"status": "working"})
+        hook.write_agent_fact("s1", "sub1", {"status": "working"})
+        hook.delete_subagent_facts("s1")
+        assert hook.agent_fact_path("s1", "").exists()
+        assert not hook.agent_fact_path("s1", "sub1").exists()
 
 
 # -- Event handlers --
@@ -160,96 +229,166 @@ class TestEventHandlers:
         )
         state = json.loads(state_file.read_text())
         assert state["session_id"] == "s1"
-        assert state["status"] == "working"
+        # Status is in agent fact, not session JSON
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
 
-    def test_post_tool_use_updates_status(self, hook, tmp_path, make_transcript):
+    def test_pre_tool_use_adds_tool(self, hook):
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        hook.handle_pre_tool_use("s1", "", "tool-123", "Bash", NOW)
+        fact = read_fact(hook, "s1")
+        assert "tool-123" in fact["tools"]
+        assert fact["tools"]["tool-123"]["status"] == "working"
+        assert fact["status"] == "working"
+
+    def test_pre_tool_use_noop_without_tool_id(self, hook):
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        hook.handle_pre_tool_use("s1", "", "", "Bash", NOW)
+        fact = read_fact(hook, "s1")
+        assert fact["tools"] == {}
+
+    def test_post_tool_use_removes_tool(self, hook, tmp_path, make_transcript):
         state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "status": "waiting"}))
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {
+            "status": "working",
+            "tools": {"tool-123": {"status": "working"}},
+        })
         transcript = make_transcript([])
         hook.handle_post_tool_use(
-            state_file,
-            str(transcript),
-            "s1",
-            "/proj",
-            "proj",
-            NOW,
-            99,
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+            agent_id="", tool_use_id="tool-123",
         )
-        state = json.loads(state_file.read_text())
-        assert state["status"] == "working"
+        fact = read_fact(hook, "s1")
+        assert "tool-123" not in fact.get("tools", {})
 
-    def test_stop_sets_pending_waiting(self, hook, tmp_path, make_transcript):
+    def test_post_tool_use_keeps_needs_approval(self, hook, tmp_path, make_transcript):
+        """PostToolUse without tool_use_id clears working tools but keeps needs_approval."""
         state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "status": "working"}))
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {
+            "status": "needs_approval",
+            "tools": {
+                "t1": {"status": "working"},
+                "t2": {"status": "needs_approval"},
+            },
+        })
         transcript = make_transcript([])
-        hook.handle_stop(state_file, str(transcript), NOW)
-        state = json.loads(state_file.read_text())
-        assert state["status"] == "pending_waiting"
+        hook.handle_post_tool_use(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+            agent_id="", tool_use_id="",
+        )
+        fact = read_fact(hook, "s1")
+        assert "t1" not in fact["tools"]
+        assert "t2" in fact["tools"]
+
+    def test_stop_clears_tools_and_sets_waiting(self, hook, tmp_path, make_transcript):
+        state_file = tmp_path / "s1.json"
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {
+            "status": "working",
+            "tools": {"t1": {"status": "working"}},
+        })
+        transcript = make_transcript([])
+        hook.handle_stop(state_file, str(transcript), "s1", "", NOW)
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
+        assert fact["tools"] == {}
 
     def test_stop_noop_without_state(self, hook, tmp_path, make_transcript):
         state_file = tmp_path / "missing.json"
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
         transcript = make_transcript([])
-        hook.handle_stop(state_file, str(transcript), NOW)
-        assert not state_file.exists()
+        hook.handle_stop(state_file, str(transcript), "s1", "", NOW)
+        # Agent fact should still be updated to waiting
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
 
-    def test_notification_permission_prompt(self, hook, tmp_path):
+    def test_stop_cleans_subagent_facts(self, hook, tmp_path, make_transcript):
         state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "status": "working"}))
-        hook.handle_notification(state_file, "permission_prompt", NOW)
-        state = json.loads(state_file.read_text())
-        assert state["status"] == "needs_approval"
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        hook.write_agent_fact("s1", "sub1", {"status": "working", "tools": {}})
+        transcript = make_transcript([])
+        hook.handle_stop(state_file, str(transcript), "s1", "", NOW)
+        assert not hook.agent_fact_path("s1", "sub1").exists()
 
-    def test_notification_idle_skips_working(self, hook, tmp_path):
-        """idle_prompt must not clobber working state (async race fix)."""
-        state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "status": "working"}))
-        hook.handle_notification(state_file, "idle_prompt", NOW)
-        state = json.loads(state_file.read_text())
-        assert state["status"] == "working"
+    def test_stop_failure_clears_tools(self, hook):
+        hook.write_agent_fact("s1", "", {
+            "status": "working",
+            "tools": {"t1": {"status": "working"}},
+        })
+        hook.handle_stop_failure("s1", "", NOW)
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
+        assert fact["tools"] == {}
 
-    def test_notification_idle_sets_pending_waiting(self, hook, tmp_path):
-        """idle_prompt transitions non-working states to pending_waiting."""
+    def test_permission_request_sets_needs_approval(self, hook, tmp_path):
         state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "status": "waiting"}))
-        hook.handle_notification(state_file, "other_type", NOW)
-        state = json.loads(state_file.read_text())
-        assert state["status"] == "pending_waiting"
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {
+            "status": "working",
+            "tools": {"t1": {"status": "working", "tool_name": "Bash"}},
+        })
+        hook.handle_permission_request(
+            state_file, "s1", "", NOW,
+            tool_use_id="t1", tool_name="Bash",
+            tool_input={"command": "rm -rf /"},
+        )
+        fact = read_fact(hook, "s1")
+        assert fact["tools"]["t1"]["status"] == "needs_approval"
+        assert fact["tools"]["t1"]["command"] == "rm -rf /"
+        assert fact["status"] == "needs_approval"
 
-    def test_permission_request(self, hook, tmp_path):
+    def test_permission_request_records_approval_timestamp(self, hook, tmp_path):
         state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "status": "working"}))
-        hook.handle_permission_request(state_file, NOW)
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        hook.handle_permission_request(state_file, "s1", "", NOW)
         state = json.loads(state_file.read_text())
-        assert state["status"] == "needs_approval"
+        assert NOW in state["approval_timestamps"]
 
-    def test_subagent_start_adds(self, hook, tmp_path):
-        state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "subagents": []}))
-        hook.handle_subagent_start(state_file, "a1", "general", NOW)
-        state = json.loads(state_file.read_text())
-        assert len(state["subagents"]) == 1
-        assert state["subagents"][0]["agent_id"] == "a1"
+    def test_subagent_start_creates_fact(self, hook, tmp_sessions):
+        hook.handle_subagent_start("s1", "a1", "general", NOW)
+        fact = read_fact(hook, "s1", "a1")
+        assert fact["status"] == "working"
+        assert fact["agent_type"] == "general"
 
-    def test_subagent_start_no_duplicate(self, hook, tmp_path):
-        state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "subagents": [SUBAGENT]}))
-        hook.handle_subagent_start(state_file, "a1", "general", NOW)
-        state = json.loads(state_file.read_text())
-        assert len(state["subagents"]) == 1
+    def test_subagent_start_with_transcript(self, hook, tmp_sessions):
+        hook.handle_subagent_start("s1", "a1", "Explore", NOW, "/path/to/transcript.jsonl")
+        fact = read_fact(hook, "s1", "a1")
+        assert fact["transcript_path"] == "/path/to/transcript.jsonl"
 
-    def test_subagent_stop_removes(self, hook, tmp_path):
-        state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "subagents": [SUBAGENT]}))
-        hook.handle_subagent_stop(state_file, "a1", NOW)
-        state = json.loads(state_file.read_text())
-        assert len(state["subagents"]) == 0
+    def test_subagent_start_noop_empty_id(self, hook, tmp_sessions):
+        hook.handle_subagent_start("s1", "", "general", NOW)
+        assert not list(tmp_sessions.glob("s1.agent.*.json"))
 
-    def test_subagent_start_noop_empty_id(self, hook, tmp_path):
+    def test_subagent_stop_deletes_fact(self, hook, tmp_sessions):
+        hook.write_agent_fact("s1", "a1", {"status": "working"})
+        hook.handle_subagent_stop("s1", "a1")
+        assert not hook.agent_fact_path("s1", "a1").exists()
+
+    def test_user_prompt_submit_sets_working(self, hook, tmp_path, make_transcript):
         state_file = tmp_path / "s1.json"
-        state_file.write_text(json.dumps({"session_id": "s1", "subagents": []}))
-        hook.handle_subagent_start(state_file, "", "general", NOW)
-        state = json.loads(state_file.read_text())
-        assert len(state["subagents"]) == 0
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {"status": "waiting", "tools": {}})
+        transcript = make_transcript([])
+        hook.handle_user_prompt_submit(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+        )
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "working"
+
+    def test_user_prompt_submit_clears_subagents(self, hook, tmp_path, make_transcript):
+        state_file = tmp_path / "s1.json"
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {"status": "waiting", "tools": {}})
+        hook.write_agent_fact("s1", "sub1", {"status": "working", "tools": {}})
+        transcript = make_transcript([])
+        hook.handle_user_prompt_submit(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+        )
+        assert not hook.agent_fact_path("s1", "sub1").exists()
 
 
 # -- Tag stripping / first-line extraction --
@@ -303,3 +442,239 @@ class TestUpdateCommitTracking:
         assert state["commit_count"] == 2
         assert state["unpushed_count"] == 1
         assert state["git_dirty"] is True
+
+
+# -- Watcher resolution --
+
+
+class TestWatcherTranscriptResolution:
+    """Test _find_tool_result_in_transcript and _is_transcript_interrupted."""
+
+    def test_finds_tool_result(self, hook, make_transcript):
+        transcript = make_transcript([
+            {"message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "toolu_abc", "content": "done"}
+            ]}},
+        ])
+        result = hook._find_tool_result_in_transcript(str(transcript), "toolu_abc")
+        assert result is True
+
+    def test_returns_none_when_not_found(self, hook, make_transcript):
+        transcript = make_transcript([
+            {"message": {"role": "assistant", "content": "hello"}},
+        ])
+        result = hook._find_tool_result_in_transcript(str(transcript), "toolu_xyz")
+        assert result is None
+
+    def test_detects_interruption(self, hook, make_transcript):
+        transcript = make_transcript([
+            {"message": {"role": "assistant", "content": "working..."}},
+            {"type": "summary", "summary": "[Request interrupted by user]"},
+        ])
+        assert hook._is_transcript_interrupted(str(transcript)) is True
+
+    def test_no_interruption(self, hook, make_transcript):
+        transcript = make_transcript([
+            {"message": {"role": "assistant", "content": "done"}},
+        ])
+        assert hook._is_transcript_interrupted(str(transcript)) is False
+
+    def test_missing_transcript(self, hook):
+        assert hook._is_transcript_interrupted("/nonexistent/file.jsonl") is False
+        assert hook._find_tool_result_in_transcript("/nonexistent/file.jsonl", "t1") is None
+
+
+class TestWatcherResolveSession:
+    """Test _resolve_session end-to-end with real fact files."""
+
+    def test_resolves_completed_tool_via_transcript(self, hook, make_transcript, tmp_sessions):
+        """A tool with a result in the transcript should be removed from the fact."""
+        transcript = make_transcript([
+            {"message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "toolu_abc", "content": "ok"}
+            ]}},
+        ])
+        hook.write_agent_fact("s1", "", {
+            "status": "working",
+            "tools": {"toolu_abc": {"status": "working"}},
+            "transcript_path": str(transcript),
+        })
+        state = {"session_id": "s1", "pid": 1, "transcript_path": str(transcript)}
+        with patch("os.kill"):  # Don't actually check PID
+            hook._resolve_session("s1", state, None)
+        fact = read_fact(hook, "s1")
+        assert "toolu_abc" not in fact.get("tools", {})
+        assert fact["status"] == "working"  # Still working — Stop sets waiting
+
+    def test_resolves_interrupted_session(self, hook, make_transcript, tmp_sessions):
+        """Interruption marker should set all agents to waiting."""
+        transcript = make_transcript([
+            {"type": "summary", "summary": "[Request interrupted by user]"},
+        ])
+        hook.write_agent_fact("s1", "", {
+            "status": "working", "tools": {"t1": {"status": "working"}},
+        })
+        hook.write_agent_fact("s1", "sub1", {
+            "status": "working", "tools": {},
+        })
+        state = {"session_id": "s1", "pid": 1, "transcript_path": str(transcript)}
+        hook._resolve_session("s1", state, None)
+        main_fact = read_fact(hook, "s1")
+        sub_fact = read_fact(hook, "s1", "sub1")
+        assert main_fact["status"] == "waiting"
+        assert main_fact["tools"] == {}
+        assert sub_fact["status"] == "waiting"
+
+    def test_no_resolution_when_no_pending_tools(self, hook, make_transcript, tmp_sessions):
+        """No changes when agent has no pending tools."""
+        transcript = make_transcript([])
+        hook.write_agent_fact("s1", "", {
+            "status": "waiting", "tools": {},
+        })
+        state = {"session_id": "s1", "pid": 1, "transcript_path": str(transcript)}
+        hook._resolve_session("s1", state, None)
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
+
+    def test_process_inspection_flips_to_working(self, hook, tmp_sessions):
+        """When a needs_approval command is already running, flip to working."""
+        hook.write_agent_fact("s1", "", {
+            "status": "needs_approval",
+            "tools": {"t1": {"status": "needs_approval", "command": "npm test"}},
+        })
+        state = {"session_id": "s1", "pid": 12345, "transcript_path": ""}
+        # Mock process tree: PID 12345 has child 12346 running "npm test"
+        proc_tree = {12345: 1, 12346: 12345}
+        with patch.object(hook, "_is_command_running", return_value=True):
+            hook._resolve_session("s1", state, proc_tree)
+        fact = read_fact(hook, "s1")
+        assert fact["tools"]["t1"]["status"] == "working"
+        assert fact["status"] == "working"
+
+
+class TestWatcherTick:
+    """Test _watcher_tick for PID liveness and session cleanup."""
+
+    def test_cleans_up_dead_pid_session(self, hook, tmp_sessions, make_state):
+        make_state("s1", {"session_id": "s1", "pid": 99999999, "updated_at": NOW})
+        hook.write_agent_fact("s1", "", {"status": "working"})
+        # PID 99999999 should not be alive
+        active = hook._watcher_tick()
+        assert active == 0
+        assert not (tmp_sessions / "s1.json").exists()
+        assert not hook.agent_fact_path("s1", "").exists()
+
+    def test_counts_live_sessions(self, hook, tmp_sessions, make_state):
+        import os
+        make_state("s1", {"session_id": "s1", "pid": os.getpid(), "updated_at": NOW})
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        active = hook._watcher_tick()
+        assert active == 1
+
+
+# -- Full lifecycle simulation --
+
+
+class TestFullLifecycle:
+    """Simulate a realistic session lifecycle through hook events."""
+
+    def test_session_lifecycle(self, hook, tmp_path, make_transcript):
+        """SessionStart → UserPromptSubmit → PreToolUse → PostToolUse → Stop."""
+        state_file = tmp_path / "s1.json"
+        transcript = make_transcript([])
+
+        # 1. SessionStart
+        hook.handle_session_start(state_file, str(transcript), "s1", "/proj", "proj", NOW, 99)
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
+
+        # 2. UserPromptSubmit
+        hook.handle_user_prompt_submit(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+        )
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "working"
+        assert fact["tools"] == {}
+
+        # 3. PreToolUse
+        hook.handle_pre_tool_use("s1", "", "t1", "Bash", NOW)
+        fact = read_fact(hook, "s1")
+        assert fact["tools"]["t1"]["status"] == "working"
+
+        # 4. PostToolUse
+        hook.handle_post_tool_use(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+            agent_id="", tool_use_id="t1",
+        )
+        fact = read_fact(hook, "s1")
+        assert "t1" not in fact.get("tools", {})
+
+        # 5. Stop
+        hook.handle_stop(state_file, str(transcript), "s1", "", NOW)
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "waiting"
+
+    def test_permission_lifecycle(self, hook, tmp_path, make_transcript):
+        """PreToolUse → PermissionRequest → (approve) → PostToolUse."""
+        state_file = tmp_path / "s1.json"
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        transcript = make_transcript([])
+
+        # PreToolUse
+        hook.handle_pre_tool_use("s1", "", "t1", "Bash", NOW)
+        fact = read_fact(hook, "s1")
+        assert fact["status"] == "working"
+
+        # PermissionRequest
+        hook.handle_permission_request(
+            state_file, "s1", "", NOW,
+            tool_use_id="t1", tool_name="Bash",
+            tool_input={"command": "rm -rf /tmp/test"},
+        )
+        fact = read_fact(hook, "s1")
+        assert fact["tools"]["t1"]["status"] == "needs_approval"
+        assert fact["status"] == "needs_approval"
+
+        # PostToolUse (after user approves and tool runs)
+        hook.handle_post_tool_use(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+            agent_id="", tool_use_id="t1",
+        )
+        fact = read_fact(hook, "s1")
+        assert "t1" not in fact.get("tools", {})
+        # Status preserved — only Stop sets "waiting"
+
+    def test_subagent_lifecycle(self, hook, tmp_path, make_transcript):
+        """Main + subagent working concurrently."""
+        state_file = tmp_path / "s1.json"
+        state_file.write_text(json.dumps({"session_id": "s1", "updated_at": NOW}))
+        hook.write_agent_fact("s1", "", {"status": "working", "tools": {}})
+        transcript = make_transcript([])
+
+        # SubagentStart
+        hook.handle_subagent_start("s1", "a1", "Explore", NOW)
+        sub_fact = read_fact(hook, "s1", "a1")
+        assert sub_fact["status"] == "working"
+
+        # Subagent does a tool
+        hook.handle_pre_tool_use("s1", "a1", "t-sub", "Read", NOW)
+        sub_fact = read_fact(hook, "s1", "a1")
+        assert "t-sub" in sub_fact["tools"]
+
+        # Main agent does a tool concurrently
+        hook.handle_pre_tool_use("s1", "", "t-main", "Edit", NOW)
+        main_fact = read_fact(hook, "s1")
+        assert "t-main" in main_fact["tools"]
+
+        # SubagentStop
+        hook.handle_subagent_stop("s1", "a1")
+        assert not hook.agent_fact_path("s1", "a1").exists()
+
+        # Main tool completes
+        hook.handle_post_tool_use(
+            state_file, str(transcript), "s1", "/proj", "proj", NOW, 99,
+            agent_id="", tool_use_id="t-main",
+        )
+        main_fact = read_fact(hook, "s1")
+        assert "t-main" not in main_fact.get("tools", {})

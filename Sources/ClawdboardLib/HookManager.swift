@@ -26,7 +26,7 @@ public class HookManager {
     /// All hook events we register for. Claude Code requires each as a separate key.
     private static let hookEvents: [String] = [
         "SessionStart", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop",
-        "UserPromptSubmit", "SessionEnd", "SubagentStart", "SubagentStop",
+        "StopFailure", "UserPromptSubmit", "SessionEnd", "SubagentStart", "SubagentStop",
     ]
 
     /// Check if all expected hooks are installed (via plugin or direct settings)
@@ -111,18 +111,6 @@ public class HookManager {
             eventHooks.append(["matcher": "*", "hooks": [hookEntry]])
             hooks[event] = eventHooks
         }
-
-        // Notification hooks use specific matchers to distinguish type
-        var notifHooks = removeClawdboard(hooks["Notification"] as? [[String: Any]] ?? [])
-        for matcher in ["idle_prompt", "permission_prompt"] {
-            let entry: [String: Any] = [
-                "type": "command",
-                "command": hookCommand + " \(matcher)",
-                "timeout": 10,
-            ]
-            notifHooks.append(["matcher": matcher, "hooks": [entry]])
-        }
-        hooks["Notification"] = notifHooks
 
         settings["hooks"] = hooks
 
