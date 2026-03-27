@@ -54,7 +54,77 @@ public enum AccessibilityHelper {
         stringAttribute(kAXValueAttribute as String, from: element)
     }
 
+    /// Enable Electron accessibility tree (required for VS Code / Cursor).
+    /// Must be called before searching the AX tree of an Electron-based app.
+    public static func enableElectronAccessibility(pid: pid_t) {
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(
+            appElement, "AXManualAccessibility" as CFString, true as CFBoolean)
+    }
+
+    /// BFS to find an AXButton whose AXDescription matches the given string.
+    public static func findButton(
+        pid: pid_t,
+        description: String,
+        maxDepth: Int = 25
+    ) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(pid)
+        return findElementByRole(
+            root: appElement, role: "AXButton",
+            attribute: kAXDescriptionAttribute as String,
+            matching: { $0 == description }, maxDepth: maxDepth)
+    }
+
+    /// BFS to find an AXButton whose AXTitle starts with the given prefix.
+    public static func findButtonByTitlePrefix(
+        pid: pid_t,
+        titlePrefix: String,
+        maxDepth: Int = 25
+    ) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(pid)
+        return findElementByRole(
+            root: appElement, role: "AXButton",
+            attribute: kAXTitleAttribute as String,
+            matching: { $0.hasPrefix(titlePrefix) }, maxDepth: maxDepth)
+    }
+
+    /// Click an AX element. Public wrapper around the private click helper.
+    @discardableResult
+    public static func click(_ element: AXUIElement) -> Bool {
+        clickElement(element)
+    }
+
     // MARK: - Private
+
+    /// Generic BFS to find an element by role and a predicate on an attribute value.
+    private static func findElementByRole(
+        root: AXUIElement,
+        role targetRole: String,
+        attribute: String,
+        matching predicate: (String) -> Bool,
+        maxDepth: Int
+    ) -> AXUIElement? {
+        var queue: [(element: AXUIElement, depth: Int)] = [(root, 0)]
+        var index = 0
+
+        while index < queue.count {
+            let (element, depth) = queue[index]
+            index += 1
+
+            let role = stringAttribute(kAXRoleAttribute as String, from: element)
+            let attrVal = stringAttribute(attribute, from: element)
+
+            if role == targetRole, let attrVal = attrVal, predicate(attrVal) {
+                return element
+            }
+
+            guard depth < maxDepth else { continue }
+            for child in children(of: element) {
+                queue.append((child, depth + 1))
+            }
+        }
+        return nil
+    }
 
     /// Two-phase BFS: first locate an AXGroup whose AXDescription contains "Tool Window",
     /// then search within that group for an AXStaticText whose AXValue contains the search string.
