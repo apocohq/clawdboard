@@ -685,7 +685,11 @@ public class AppState {
     /// We scan from the end since the entry appears after the first assistant response.
     private static func readAITitle(cwd: String, sessionId: String) -> String? {
         // Path: ~/.claude/projects/{cwd-with-slashes-as-dashes}/{sessionId}.jsonl
-        let projectDir = "-" + cwd.dropFirst().replacingOccurrences(of: "/", with: "-")
+        let projectDir =
+            "-"
+            + cwd.dropFirst()
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ".", with: "-")
         let jsonlPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects/\(projectDir)/\(sessionId).jsonl")
 
