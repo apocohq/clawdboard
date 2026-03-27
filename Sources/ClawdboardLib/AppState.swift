@@ -719,7 +719,7 @@ public class AppState {
     /// 3. Find and click the "Session history" button to open the session picker
     /// 4. Find the session button whose title starts with the aiTitle and click it
     private func focusVSCodeSession(sessionId: String, cwd: String, ideName: String) {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
             guard let aiTitle = Self.readAITitle(cwd: cwd, sessionId: sessionId) else {
                 debugLog("[VSCode] No aiTitle — cannot focus session")
                 return
@@ -733,7 +733,7 @@ public class AppState {
 
             // Enable Electron accessibility tree (idempotent)
             AccessibilityHelper.enableElectronAccessibility(pid: pid)
-            Thread.sleep(forTimeInterval: 0.3)
+            Thread.sleep(forTimeInterval: 0.1)
 
             // Check if the current session already matches (avoid opening the picker needlessly)
             if AccessibilityHelper.findButtonByTitlePrefix(pid: pid, titlePrefix: aiTitle) != nil {
@@ -750,7 +750,7 @@ public class AppState {
 
             debugLog("[VSCode] Clicking 'Session history' button")
             AccessibilityHelper.click(historyBtn)
-            Thread.sleep(forTimeInterval: 0.5)
+            Thread.sleep(forTimeInterval: 0.2)
 
             // Find the session in the picker by aiTitle prefix
             guard
