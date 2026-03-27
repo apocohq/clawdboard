@@ -733,7 +733,6 @@ public class AppState {
 
             // Enable Electron accessibility tree (idempotent)
             AccessibilityHelper.enableElectronAccessibility(pid: pid)
-            Thread.sleep(forTimeInterval: 0.1)
 
             // Check if the current session already matches (avoid opening the picker needlessly)
             if AccessibilityHelper.findButtonByTitlePrefix(pid: pid, titlePrefix: aiTitle) != nil {
@@ -750,7 +749,7 @@ public class AppState {
 
             debugLog("[VSCode] Clicking 'Session history' button")
             AccessibilityHelper.click(historyBtn)
-            Thread.sleep(forTimeInterval: 0.2)
+            Thread.sleep(forTimeInterval: 0.1)
 
             // Find the session in the picker by aiTitle prefix
             guard
