@@ -8,7 +8,7 @@ public struct SessionsTab: View {
 
     /// Sessions grouped alphabetically (stable order).
     private var groupedSessions: [(key: String, sessions: [AgentSession])] {
-        let dict = Dictionary(grouping: appState.sortedSessions) { session in
+        let dict = Dictionary(grouping: appState.activeSessions) { session in
             session.githubRepo ?? session.projectName
         }
         return

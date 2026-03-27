@@ -112,7 +112,7 @@ public struct PanelView: View {
 
     private var footer: some View {
         HStack {
-            Text("\(appState.sessions.count) session\(appState.sessions.count == 1 ? "" : "s")")
+            Text("\(appState.activeSessions.count) session\(appState.activeSessions.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
