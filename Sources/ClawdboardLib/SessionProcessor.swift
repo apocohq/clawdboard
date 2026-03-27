@@ -31,6 +31,15 @@ public struct SessionProcessor {
             resolveViaProcessInspection(&s)
         }
 
+        // Interrupted generation: transcript ends with "[Request interrupted by user]"
+        // but no Stop hook fires. Check transcript directly.
+        if s.status == .working, age >= 2.0,
+            let tp = s.transcriptPath, isTranscriptInterrupted(tp)
+        {
+            s.mainAgentStatus = .pendingWaiting
+            s.status = deriveStatus(s)
+        }
+
         // Debounce: pending_waiting → waiting after 1.5s
         if s.status == .pendingWaiting, age >= 1.5 {
             s.status = .waiting
@@ -121,10 +130,33 @@ public struct SessionProcessor {
             else { continue }
             let isRejection =
                 line.contains("User rejected tool use")
-                || line.contains("Request interrupted by user")
+                || line.contains("[Request interrupted by user]")
             return ToolResult(isRejection: isRejection)
         }
         return nil
+    }
+
+    // MARK: - Interruption Detection
+
+    /// Check if the transcript ends with "[Request interrupted by user]".
+    private func isTranscriptInterrupted(_ transcriptPath: String) -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: transcriptPath) else { return false }
+        defer { handle.closeFile() }
+
+        let fileSize = handle.seekToEndOfFile()
+        let readSize = min(UInt64(4096), fileSize)
+        guard readSize > 0 else { return false }
+        handle.seek(toFileOffset: fileSize - readSize)
+        let data = handle.readData(ofLength: Int(readSize))
+
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+
+        // Check the last few lines for the interruption marker
+        let lines = text.components(separatedBy: "\n")
+        for line in lines.suffix(5).reversed() {
+            if line.contains("[Request interrupted by user]") { return true }
+        }
+        return false
     }
 
     // MARK: - Process Inspection

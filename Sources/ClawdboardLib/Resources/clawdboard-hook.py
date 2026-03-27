@@ -357,9 +357,10 @@ def main() -> None:
 
     # Debug logging
     subtype_suffix = f":{notification_subtype}" if notification_subtype else ""
+    agent_suffix = f" agent={agent_id}" if agent_id else ""
     with open(LOG_FILE, "a") as lf:
         lf.write(
-            f"[{now}] {hook_event}{subtype_suffix} session={session_id} cwd={cwd}\n"
+            f"[{now}] {hook_event}{subtype_suffix} session={session_id}{agent_suffix} cwd={cwd}\n"
         )
 
     if hook_event == "SessionStart":
