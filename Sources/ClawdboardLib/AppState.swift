@@ -843,12 +843,8 @@ public class AppState {
 // MARK: - Display Status Helper
 
 extension AgentSession {
-    /// The status to show in the UI, accounting for debounce
-    /// (pending_waiting shows as "working" until debounced to "waiting")
+    /// The status to show in the UI.
     public var displayStatus: AgentStatus {
-        switch status {
-        case .pendingWaiting: return .working
-        default: return status
-        }
+        status
     }
 }

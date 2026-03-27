@@ -87,8 +87,10 @@ public class SessionStateWatcher {
         }
     }
 
-    /// Read all .json state files from the sessions directory.
-    /// Removes state files for processes that are no longer running.
+    /// Read all session + agent fact files from the sessions directory.
+    /// Session metadata: {uuid}.json (no ".agent." in name)
+    /// Agent facts: {uuid}.agent.{key}.json
+    /// Merges agent facts into session objects. Removes dead PID sessions.
     public func readAllSessions() -> [AgentSession] {
         let fm = FileManager.default
         guard
@@ -101,10 +103,25 @@ public class SessionStateWatcher {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        return files.compactMap { url -> AgentSession? in
-            guard url.pathExtension == "json" else { return nil }
+        // Separate session files from agent fact files
+        let jsonFiles = files.filter { $0.pathExtension == "json" }
+        let sessionFiles = jsonFiles.filter { !$0.lastPathComponent.contains(".agent.") }
+        let agentFiles = jsonFiles.filter { $0.lastPathComponent.contains(".agent.") }
+
+        // Index agent fact files by session ID
+        var agentFactsBySession: [String: [(key: String, url: URL)]] = [:]
+        for url in agentFiles {
+            // Format: {session_id}.agent.{key}.json
+            let name = url.deletingPathExtension().lastPathComponent  // {session_id}.agent.{key}
+            guard let agentRange = name.range(of: ".agent.") else { continue }
+            let sessionId = String(name[name.startIndex..<agentRange.lowerBound])
+            let agentKey = String(name[agentRange.upperBound...])
+            agentFactsBySession[sessionId, default: []].append((key: agentKey, url: url))
+        }
+
+        return sessionFiles.compactMap { url -> AgentSession? in
             guard let data = try? Data(contentsOf: url) else { return nil }
-            guard let session = try? decoder.decode(AgentSession.self, from: data) else {
+            guard var session = try? decoder.decode(AgentSession.self, from: data) else {
                 return nil
             }
 
@@ -112,18 +129,97 @@ public class SessionStateWatcher {
             if let pid = session.pid {
                 if kill(pid_t(pid), 0) != 0 {
                     try? fm.removeItem(at: url)
+                    // Clean up agent fact files too
+                    for (_, agentUrl) in agentFactsBySession[session.sessionId] ?? [] {
+                        try? fm.removeItem(at: agentUrl)
+                    }
                     return nil
                 }
             } else if let updatedAt = session.updatedAt,
                 Date().timeIntervalSince(updatedAt) > 120
             {
-                // No PID (legacy state file) and stale for 2+ minutes — remove
                 try? fm.removeItem(at: url)
                 return nil
             }
 
+            // Merge agent fact files into session
+            if let agentEntries = agentFactsBySession[session.sessionId] {
+                mergeAgentFacts(&session, from: agentEntries, decoder: decoder)
+            }
+
             return session
         }
+    }
+
+    /// Merge agent fact files into a session.
+    /// "main" agent populates mainAgentStatus and per-tool fields.
+    /// Other agents become subagent entries.
+    private func mergeAgentFacts(
+        _ session: inout AgentSession,
+        from entries: [(key: String, url: URL)],
+        decoder: JSONDecoder
+    ) {
+        var subagents: [Subagent] = []
+
+        for (key, url) in entries {
+            guard let data = try? Data(contentsOf: url),
+                let fact = try? decoder.decode(AgentFact.self, from: data)
+            else { continue }
+
+            // Extract pending tool info from the tools dict
+            let (pendingToolId, pendingCommand) = Self.extractPendingTool(from: fact)
+
+            if key == "main" {
+                session.mainAgentStatus = fact.status
+                session.mainPendingToolUseId = pendingToolId
+                session.pendingToolCommand = pendingCommand
+                // Use the most recent updatedAt between session and main agent
+                if let factUpdated = fact.updatedAt {
+                    if let sessionUpdated = session.updatedAt {
+                        if factUpdated > sessionUpdated {
+                            session.updatedAt = factUpdated
+                        }
+                    } else {
+                        session.updatedAt = factUpdated
+                    }
+                }
+            } else {
+                // Subagent
+                var sub = Subagent(
+                    agentId: key,
+                    agentType: fact.agentType ?? "unknown",
+                    startedAt: fact.startedAt
+                )
+                sub.status = fact.status
+                sub.pendingToolUseId = pendingToolId
+                sub.pendingToolCommand = pendingCommand
+                sub.transcriptPath = fact.transcriptPath
+                subagents.append(sub)
+            }
+        }
+
+        if !subagents.isEmpty {
+            session.subagents = subagents
+        }
+    }
+
+    /// Extract the first needs_approval tool's ID and command from a fact's tools dict.
+    /// Falls back to any working tool's ID if none need approval.
+    private static func extractPendingTool(from fact: AgentFact) -> (String?, String?) {
+        guard let tools = fact.tools else { return (nil, nil) }
+        // Prefer the tool that needs approval (for process inspection)
+        for (toolId, tool) in tools {
+            if tool.status == .needsApproval {
+                return (toolId, tool.command)
+            }
+        }
+        // Fall back to any working tool (for transcript resolution)
+        for (toolId, tool) in tools {
+            if tool.status == .working {
+                return (toolId, nil)
+            }
+        }
+        return (nil, nil)
     }
 
     deinit {

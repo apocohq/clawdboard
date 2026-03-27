@@ -31,18 +31,18 @@ public struct SessionProcessor {
             resolveViaProcessInspection(&s)
         }
 
-        // Interrupted generation: transcript ends with "[Request interrupted by user]"
-        // but no Stop hook fires. Check transcript directly.
-        if s.status == .working, age >= 2.0,
+        // Interrupted session: transcript ends with "[Request interrupted by user]"
+        // but no Stop hook fires. An interrupt kills ALL agents (main + subagents)
+        // since SubagentStop won't fire for killed subagents.
+        if age >= 2.0, s.status != .waiting, s.status != .abandoned,
             let tp = s.transcriptPath, isTranscriptInterrupted(tp)
         {
-            s.mainAgentStatus = .pendingWaiting
+            s.mainAgentStatus = .waiting
+            if var subs = s.subagents {
+                for i in subs.indices { subs[i].status = .waiting }
+                s.subagents = subs
+            }
             s.status = deriveStatus(s)
-        }
-
-        // Debounce: pending_waiting → waiting after 1.5s
-        if s.status == .pendingWaiting, age >= 1.5 {
-            s.status = .waiting
         }
 
         // Abandoned: waiting for 10+ minutes
@@ -56,7 +56,7 @@ public struct SessionProcessor {
     // MARK: - Status Derivation
 
     /// Compute session-level status from per-agent statuses.
-    /// Priority: needs_approval > working > pending_waiting > waiting.
+    /// Priority: needs_approval > working > waiting.
     private func deriveStatus(_ session: AgentSession) -> AgentStatus {
         var statuses: [AgentStatus] = []
         if let main = session.mainAgentStatus { statuses.append(main) }
@@ -65,8 +65,7 @@ public struct SessionProcessor {
         }
         if statuses.contains(.needsApproval) { return .needsApproval }
         if statuses.contains(.working) { return .working }
-        if statuses.contains(.pendingWaiting) { return .pendingWaiting }
-        // Fall back to mainAgentStatus, then the hook's computed status
+        if statuses.contains(.waiting) { return .waiting }
         return session.mainAgentStatus ?? session.status
     }
 
@@ -130,7 +129,7 @@ public struct SessionProcessor {
             else { continue }
             let isRejection =
                 line.contains("User rejected tool use")
-                || line.contains("[Request interrupted by user]")
+                || line.contains("Request interrupted by user")
             return ToolResult(isRejection: isRejection)
         }
         return nil
@@ -138,40 +137,62 @@ public struct SessionProcessor {
 
     // MARK: - Interruption Detection
 
-    /// Check if the transcript ends with "[Request interrupted by user]".
+    /// Check if the very last transcript entry is "[Request interrupted by user]".
+    /// Only the last line matters — if anything happened after the interrupt, it's stale.
     private func isTranscriptInterrupted(_ transcriptPath: String) -> Bool {
         guard let handle = FileHandle(forReadingAtPath: transcriptPath) else { return false }
         defer { handle.closeFile() }
 
         let fileSize = handle.seekToEndOfFile()
-        let readSize = min(UInt64(4096), fileSize)
+        let readSize = min(UInt64(2048), fileSize)
         guard readSize > 0 else { return false }
         handle.seek(toFileOffset: fileSize - readSize)
         let data = handle.readData(ofLength: Int(readSize))
 
         guard let text = String(data: data, encoding: .utf8) else { return false }
 
-        // Check the last few lines for the interruption marker
+        // Find the last non-empty line
         let lines = text.components(separatedBy: "\n")
-        for line in lines.suffix(5).reversed() {
-            if line.contains("[Request interrupted by user]") { return true }
-        }
-        return false
+        guard let lastLine = lines.last(where: { !$0.isEmpty }) else { return false }
+        return lastLine.contains("Request interrupted by user")
     }
 
     // MARK: - Process Inspection
 
-    /// If the session is waiting for approval but the approved command is already running
-    /// as a child process, transition to working. Matches the exact command string from
-    /// the PermissionRequest, so subagent/hook/plugin children don't cause false positives.
+    /// If any agent is waiting for approval but its command is already running
+    /// as a child process, transition that agent to working. Matches the exact command
+    /// string from the PermissionRequest against child process args.
     private func resolveViaProcessInspection(_ session: inout AgentSession) {
-        guard let pid = session.pid,
-            let cmd = session.pendingToolCommand, !cmd.isEmpty,
-            isCommandRunning(cmd, underParent: pid_t(pid))
-        else { return }
+        guard let pid = session.pid else { return }
+        let parentPid = pid_t(pid)
+        var changed = false
 
-        session.mainAgentStatus = .working
-        session.status = deriveStatus(session)
+        // Check main agent
+        if session.mainAgentStatus == .needsApproval,
+            let cmd = session.pendingToolCommand, !cmd.isEmpty,
+            isCommandRunning(cmd, underParent: parentPid)
+        {
+            session.mainAgentStatus = .working
+            changed = true
+        }
+
+        // Check subagents
+        if var subs = session.subagents {
+            for i in subs.indices {
+                if subs[i].status == .needsApproval,
+                    let cmd = subs[i].pendingToolCommand, !cmd.isEmpty,
+                    isCommandRunning(cmd, underParent: parentPid)
+                {
+                    subs[i].status = .working
+                    changed = true
+                }
+            }
+            if changed { session.subagents = subs }
+        }
+
+        if changed {
+            session.status = deriveStatus(session)
+        }
     }
 
     /// Check if a specific command is running as a child (or grandchild) of a process.

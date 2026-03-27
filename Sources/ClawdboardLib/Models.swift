@@ -234,10 +234,39 @@ public struct PRInfo: Codable, Equatable {
     }
 }
 
+// MARK: - Agent Fact
+
+/// A single tool call tracked in an agent's fact file.
+public struct ToolFact: Codable, Equatable {
+    public var status: AgentStatus?
+    public var command: String?
+}
+
+/// Per-agent fact file written by the hook script.
+/// Each agent (main + subagents) has its own file: {session_id}.agent.{key}.json
+/// Swift reads these and merges them into the AgentSession.
+public struct AgentFact: Codable, Equatable {
+    public var status: AgentStatus?
+    public var tools: [String: ToolFact]?
+    public var transcriptPath: String?
+    public var updatedAt: Date?
+    public var agentType: String?
+    public var startedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case tools
+        case transcriptPath = "transcript_path"
+        case updatedAt = "updated_at"
+        case agentType = "agent_type"
+        case startedAt = "started_at"
+    }
+}
+
 // MARK: - Agent Session
 
 /// Represents a Claude Code agent session.
-/// For hook-tracked sessions, this maps directly to the state file JSON.
+/// Session metadata comes from {session_id}.json, per-agent data from .agent.*.json files.
 /// For fallback-discovered sessions, only a subset of fields are populated.
 public struct AgentSession: Identifiable, Codable, Equatable {
     public var id: String { sessionId }
@@ -245,7 +274,8 @@ public struct AgentSession: Identifiable, Codable, Equatable {
     public let sessionId: String
     public let cwd: String
     public var projectName: String
-    public var status: AgentStatus
+    /// Session-level status — derived by SessionProcessor from agent facts, not from JSON.
+    public var status: AgentStatus = .unknown
     public var model: String?
     public var gitBranch: String?
     public var slug: String?
@@ -355,11 +385,9 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         case approvalTimestamps = "approval_timestamps"
         case prInfo = "pr_info"
         case terminalTabTitle = "terminal_tab_title"
-        case mainAgentStatus = "main_agent_status"
-        case mainPendingToolUseId = "main_pending_tool_use_id"
-        case pendingToolCommand = "pending_tool_command"
-        case hasPendingTool = "has_pending_tool"
         case transcriptPath = "transcript_path"
+        // mainAgentStatus, mainPendingToolUseId, pendingToolCommand, hasPendingTool
+        // are NOT in the session JSON — populated from agent fact files by the watcher.
     }
 
     public init(
@@ -432,6 +460,41 @@ public struct AgentSession: Identifiable, Codable, Equatable {
         self.pendingToolCommand = pendingToolCommand
         self.hasPendingTool = hasPendingTool
         self.transcriptPath = transcriptPath
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        cwd = try c.decode(String.self, forKey: .cwd)
+        projectName = try c.decodeIfPresent(String.self, forKey: .projectName) ?? ""
+        status = try c.decodeIfPresent(AgentStatus.self, forKey: .status) ?? .unknown
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        gitBranch = try c.decodeIfPresent(String.self, forKey: .gitBranch)
+        slug = try c.decodeIfPresent(String.self, forKey: .slug)
+        contextPct = try c.decodeIfPresent(Double.self, forKey: .contextPct)
+        startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
+        subagents = try c.decodeIfPresent([Subagent].self, forKey: .subagents)
+        pid = try c.decodeIfPresent(Int.self, forKey: .pid)
+        isHookTracked = try c.decodeIfPresent(Bool.self, forKey: .isHookTracked) ?? false
+        remoteHost = try c.decodeIfPresent(String.self, forKey: .remoteHost)
+        githubRepo = try c.decodeIfPresent(String.self, forKey: .githubRepo)
+        iterm2SessionId = try c.decodeIfPresent(String.self, forKey: .iterm2SessionId)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        firstPrompt = try c.decodeIfPresent(String.self, forKey: .firstPrompt)
+        startSha = try c.decodeIfPresent(String.self, forKey: .startSha)
+        headSha = try c.decodeIfPresent(String.self, forKey: .headSha)
+        commitCount = try c.decodeIfPresent(Int.self, forKey: .commitCount)
+        unpushedCount = try c.decodeIfPresent(Int.self, forKey: .unpushedCount)
+        gitDirty = try c.decodeIfPresent(Bool.self, forKey: .gitDirty)
+        additions = try c.decodeIfPresent(Int.self, forKey: .additions)
+        deletions = try c.decodeIfPresent(Int.self, forKey: .deletions)
+        contextSnapshots = try c.decodeIfPresent([ContextSnapshot].self, forKey: .contextSnapshots)
+        approvalTimestamps = try c.decodeIfPresent([Date].self, forKey: .approvalTimestamps)
+        prInfo = try c.decodeIfPresent(PRInfo.self, forKey: .prInfo)
+        terminalTabTitle = try c.decodeIfPresent(String.self, forKey: .terminalTabTitle)
+        transcriptPath = try c.decodeIfPresent(String.self, forKey: .transcriptPath)
+        // Per-agent fields are populated from agent fact files, not from session JSON.
     }
 
     /// Display title: AI-generated slug title, or generic fallback

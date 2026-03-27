@@ -7,11 +7,13 @@ and writes/updates a state file in ~/.clawdboard/sessions/.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -342,6 +344,7 @@ def main() -> None:
     transcript_path: str = hook_input.get("transcript_path", "")
     agent_id: str = hook_input.get("agent_id", "")
     agent_type: str = hook_input.get("agent_type", "")
+    tool_name: str = hook_input.get("tool_name", "")
     prompt: str = hook_input.get("prompt", "")
     model: str = hook_input.get("model", "")
     tool_use_id: str = hook_input.get("tool_use_id", "")
@@ -358,10 +361,13 @@ def main() -> None:
     # Debug logging
     subtype_suffix = f":{notification_subtype}" if notification_subtype else ""
     agent_suffix = f" agent={agent_id}" if agent_id else ""
+    tool_suffix = f" tool={tool_use_id}" if tool_use_id else ""
     with open(LOG_FILE, "a") as lf:
         lf.write(
-            f"[{now}] {hook_event}{subtype_suffix} session={session_id}{agent_suffix} cwd={cwd}\n"
+            f"[{now}] {hook_event}{subtype_suffix} session={session_id}{agent_suffix}{tool_suffix} cwd={cwd}\n"
         )
+        if hook_event in ("PermissionRequest", "PreToolUse"):
+            lf.write(f"  INPUT: {json.dumps(hook_input, default=str)[:2000]}\n")
 
     if hook_event == "SessionStart":
         handle_session_start(
@@ -375,7 +381,7 @@ def main() -> None:
             model,
         )
     elif hook_event == "PreToolUse":
-        handle_pre_tool_use(state_file, agent_id, tool_use_id, now)
+        handle_pre_tool_use(session_id, agent_id, tool_use_id, tool_name, now)
     elif hook_event == "PostToolUse" or hook_event == "PostToolUseFailure":
         handle_post_tool_use(
             state_file,
@@ -386,11 +392,12 @@ def main() -> None:
             now,
             claude_pid,
             agent_id,
+            tool_use_id,
         )
     elif hook_event == "Stop":
-        handle_stop(state_file, transcript_path, agent_id, now)
+        handle_stop(state_file, transcript_path, session_id, agent_id, now)
     elif hook_event == "StopFailure":
-        handle_stop_failure(state_file, agent_id, now)
+        handle_stop_failure(session_id, agent_id, now)
     elif hook_event == "UserPromptSubmit":
         handle_user_prompt_submit(
             state_file,
@@ -405,23 +412,28 @@ def main() -> None:
     elif hook_event == "SessionEnd":
         set_terminal_title("")
         state_file.unlink(missing_ok=True)
+        delete_all_agent_facts(session_id)
     elif hook_event == "PermissionRequest":
         handle_permission_request(
             state_file,
+            session_id,
             agent_id,
             now,
+            tool_use_id,
+            tool_name,
+            transcript_path,
             hook_input.get("tool_input"),
         )
     elif hook_event == "SubagentStart":
         handle_subagent_start(
-            state_file,
+            session_id,
             agent_id,
             agent_type,
             now,
             hook_input.get("agent_transcript_path", ""),
         )
     elif hook_event == "SubagentStop":
-        handle_subagent_stop(state_file, agent_id, now)
+        handle_subagent_stop(session_id, agent_id)
 
     print('{"suppressOutput": true}')
 
@@ -683,12 +695,11 @@ def make_base_state(
         "cwd": cwd,
         "project_name": project_name,
         "github_repo": get_github_repo(cwd),
-        "status": "waiting",
-        "main_agent_status": "waiting",
         "started_at": now,
         "updated_at": now,
         "pid": claude_pid,
         "is_hook_tracked": True,
+        "transcript_path": "",
         "start_sha": head_sha,
         "head_sha": head_sha,
         "commit_count": 0,
@@ -696,60 +707,85 @@ def make_base_state(
     }
 
 
-# --- Per-agent status helpers ---
+# --- Per-agent fact files ---
+# Each agent writes its own file: {session_id}.agent.{agent_key}.json
+# Main agent uses key "main", subagents use their agent_id.
+# Swift reads all agent files and derives the session-level status.
+# File locking prevents same-agent races (e.g. PostToolUse for Read
+# overwriting PermissionRequest for Bash when both fire concurrently).
+
+def agent_fact_path(session_id: str, agent_id: str) -> Path:
+    """Return the path for an agent's fact file."""
+    key = agent_id if agent_id else "main"
+    return SESSIONS_DIR / f"{session_id}.agent.{key}.json"
 
 
-def _set_agent_status(state: JsonDict, agent_id: str, status: str) -> None:
-    """Set status for the correct agent and recompute session-level status."""
-    if agent_id:
-        for sub in state.get("subagents", []):
-            if sub["agent_id"] == agent_id:
-                sub["status"] = status
-                break
-    else:
-        state["main_agent_status"] = status
-    recompute_session_status(state)
+@contextmanager
+def _agent_lock(session_id: str, agent_id: str):
+    """Exclusive lock on an agent's fact file. Held for <50ms typically."""
+    lock_path = agent_fact_path(session_id, agent_id).with_suffix(".lock")
+    fd = open(lock_path, "w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
 
 
-def _set_pending_tool(state: JsonDict, agent_id: str, tool_use_id: str | None) -> None:
-    """Set or clear pending_tool_use_id (and pending_tool_command) for the correct agent."""
-    if agent_id:
-        for sub in state.get("subagents", []):
-            if sub["agent_id"] == agent_id:
-                sub["pending_tool_use_id"] = tool_use_id
-                if not tool_use_id:
-                    sub.pop("pending_tool_command", None)
-                return
-    else:
-        state["main_pending_tool_use_id"] = tool_use_id
-        if not tool_use_id:
-            state.pop("pending_tool_command", None)
+def read_agent_fact(session_id: str, agent_id: str) -> JsonDict:
+    """Read an agent's fact file, returning empty dict if missing."""
+    path = agent_fact_path(session_id, agent_id)
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
 
 
-def recompute_session_status(state: JsonDict) -> None:
-    """Derive session-level status from all agents.
+def write_agent_fact(session_id: str, agent_id: str, fact: JsonDict) -> None:
+    """Write an agent's fact file atomically."""
+    path = agent_fact_path(session_id, agent_id)
+    tmp = path.with_suffix(f".tmp.{os.getpid()}")
+    tmp.write_text(json.dumps(fact, indent=2))
+    tmp.rename(path)
 
-    Required because multiple agents write concurrently — a subagent's PreToolUse
-    must not overwrite the main agent's needs_approval. SessionProcessor (Swift)
-    also recomputes this, but the JSON must be correct for the file to be
-    self-consistent between reads.
+
+def derive_agent_status(fact: JsonDict) -> str:
+    """Derive agent-level status from its active tools.
+
+    Priority: needs_approval > working > waiting (no tools).
     """
-    statuses = [state.get("main_agent_status", "working")]
-    for sub in state.get("subagents", []):
-        s = sub.get("status")
-        if s:
-            statuses.append(s)
-
+    tools = fact.get("tools", {})
+    if not tools:
+        return fact.get("status", "waiting")
+    statuses = [t.get("status", "working") for t in tools.values()]
     if "needs_approval" in statuses:
-        state["status"] = "needs_approval"
-    elif "working" in statuses:
-        state["status"] = "working"
-    elif "pending_waiting" in statuses:
-        state["status"] = "pending_waiting"
-    elif "waiting" in statuses:
-        state["status"] = "waiting"
-    else:
-        state["status"] = state.get("main_agent_status", "unknown")
+        return "needs_approval"
+    if "working" in statuses:
+        return "working"
+    return "waiting"
+
+
+def delete_agent_fact(session_id: str, agent_id: str) -> None:
+    """Delete an agent's fact file."""
+    agent_fact_path(session_id, agent_id).unlink(missing_ok=True)
+
+
+def delete_all_agent_facts(session_id: str) -> None:
+    """Delete all agent fact files for a session (including main)."""
+    for f in SESSIONS_DIR.glob(f"{session_id}.agent.*.json"):
+        f.unlink(missing_ok=True)
+
+
+def delete_subagent_facts(session_id: str) -> None:
+    """Delete subagent fact files (not main). Called on UserPromptSubmit/Stop
+    to clean up orphaned subagents that didn't get SubagentStop."""
+    for f in SESSIONS_DIR.glob(f"{session_id}.agent.*.json"):
+        if f.name.endswith(".agent.main.json"):
+            continue
+        f.unlink(missing_ok=True)
 
 
 # --- Event handlers ---
@@ -774,8 +810,6 @@ def handle_session_start(
         "cwd": cwd,
         "project_name": project_name,
         "github_repo": get_github_repo(cwd),
-        "status": "waiting",
-        "main_agent_status": "waiting",
         "model": data.get("model") or model or None,
         "git_branch": data.get("git_branch") or get_git_branch(cwd),
         "slug": data.get("slug") or None,
@@ -796,6 +830,8 @@ def handle_session_start(
     update_terminal_tab_title(state)
 
     write_state(state_file, state)
+    # Main agent starts in "waiting" — transitions to "working" on UserPromptSubmit
+    write_agent_fact(session_id, "", {"status": "waiting", "updated_at": now})
 
 
 def handle_post_tool_use(
@@ -807,58 +843,88 @@ def handle_post_tool_use(
     now: str,
     claude_pid: int,
     agent_id: str = "",
+    tool_use_id: str = "",
 ) -> None:
-    state = read_state(state_file)
-    if state is None:
-        state = make_base_state(session_id, cwd, project_name, now, claude_pid)
+    # Tool completed — remove it from active tools
+    with _agent_lock(session_id, agent_id):
+        fact = read_agent_fact(session_id, agent_id)
+        tools = fact.get("tools", {})
+        if tool_use_id:
+            tools.pop(tool_use_id, None)
+        else:
+            # No tool_use_id provided — remove all working tools (completed ones).
+            # Keep needs_approval entries since those are still pending user action.
+            tools = {
+                k: v for k, v in tools.items()
+                if v.get("status") == "needs_approval"
+            }
+        fact["tools"] = tools
+        fact["status"] = derive_agent_status(fact)
+        fact["updated_at"] = now
+        write_agent_fact(session_id, agent_id, fact)
 
-    git_changed, new_branch, new_repo = _detect_git_context_change(state, cwd)
+    # Update session metadata (only for main agent — subagents don't touch it)
+    if not agent_id:
+        state = read_state(state_file)
+        if state is None:
+            state = make_base_state(session_id, cwd, project_name, now, claude_pid)
 
-    # Write "working" immediately so the UI updates before the slow transcript read
-    _set_agent_status(state, agent_id, "working")
-    _set_pending_tool(state, agent_id, None)
-    state["updated_at"] = now
-    state["transcript_path"] = transcript_path
-    write_state(state_file, state)
+        git_changed, new_branch, new_repo = _detect_git_context_change(state, cwd)
+        state["updated_at"] = now
+        state["transcript_path"] = transcript_path
 
-    # Then read transcript data and write again with full info
-    data = read_transcript_data(transcript_path, state_file)
-    merge_transcript_data(state, data)
-    if git_changed:
-        _reapply_git_info(state, new_branch, new_repo)
-    if data.get("context_pct") is not None:
-        append_context_snapshot(state, data["context_pct"], now)
-    update_commit_tracking(state, cwd or state.get("cwd", ""))
-    update_terminal_tab_title(state)
-    write_state(state_file, state)
+        data = read_transcript_data(transcript_path, state_file)
+        merge_transcript_data(state, data)
+        if git_changed:
+            _reapply_git_info(state, new_branch, new_repo)
+        if data.get("context_pct") is not None:
+            append_context_snapshot(state, data["context_pct"], now)
+        update_commit_tracking(state, cwd or state.get("cwd", ""))
+        update_terminal_tab_title(state)
+        write_state(state_file, state)
 
 
 def handle_stop(
-    state_file: Path, transcript_path: str, agent_id: str, now: str
+    state_file: Path,
+    transcript_path: str,
+    session_id: str,
+    agent_id: str,
+    now: str,
 ) -> None:
-    state = read_state(state_file)
-    if state is None:
-        return
-    data = read_transcript_data(transcript_path, state_file)
-    _set_agent_status(state, agent_id, "pending_waiting")
-    _set_pending_tool(state, agent_id, None)
-    state["updated_at"] = now
-    merge_transcript_data(state, data)
-    if data.get("context_pct") is not None:
-        append_context_snapshot(state, data["context_pct"], now)
-    update_commit_tracking(state, state.get("cwd", ""))
-    update_terminal_tab_title(state)
-    write_state(state_file, state)
+    # Main agent stopped — clean up orphaned subagent fact files
+    if not agent_id:
+        delete_subagent_facts(session_id)
+
+    # Agent stopped — clear all tools
+    with _agent_lock(session_id, agent_id):
+        fact = read_agent_fact(session_id, agent_id)
+        fact["tools"] = {}
+        fact["status"] = "waiting"
+        fact["updated_at"] = now
+        write_agent_fact(session_id, agent_id, fact)
+
+    # Update session metadata (only for main agent)
+    if not agent_id:
+        state = read_state(state_file)
+        if state is None:
+            return
+        data = read_transcript_data(transcript_path, state_file)
+        state["updated_at"] = now
+        merge_transcript_data(state, data)
+        if data.get("context_pct") is not None:
+            append_context_snapshot(state, data["context_pct"], now)
+        update_commit_tracking(state, state.get("cwd", ""))
+        update_terminal_tab_title(state)
+        write_state(state_file, state)
 
 
-def handle_stop_failure(state_file: Path, agent_id: str, now: str) -> None:
-    state = read_state(state_file)
-    if state is None:
-        return
-    _set_agent_status(state, agent_id, "pending_waiting")
-    _set_pending_tool(state, agent_id, None)
-    state["updated_at"] = now
-    write_state(state_file, state)
+def handle_stop_failure(session_id: str, agent_id: str, now: str) -> None:
+    with _agent_lock(session_id, agent_id):
+        fact = read_agent_fact(session_id, agent_id)
+        fact["tools"] = {}
+        fact["status"] = "waiting"
+        fact["updated_at"] = now
+        write_agent_fact(session_id, agent_id, fact)
 
 
 def handle_user_prompt_submit(
@@ -871,6 +937,15 @@ def handle_user_prompt_submit(
     claude_pid: int,
     prompt: str = "",
 ) -> None:
+    # User submitted a prompt — clear stale tools and orphaned subagents
+    delete_subagent_facts(session_id)
+    with _agent_lock(session_id, ""):
+        fact = read_agent_fact(session_id, "")
+        fact["tools"] = {}
+        fact["status"] = "working"
+        fact["updated_at"] = now
+        write_agent_fact(session_id, "", fact)
+
     data = read_transcript_data(transcript_path, state_file)
     state = read_state(state_file)
     if state is None:
@@ -878,8 +953,6 @@ def handle_user_prompt_submit(
 
     git_changed, new_branch, new_repo = _detect_git_context_change(state, cwd)
 
-    _set_agent_status(state, "", "working")
-    _set_pending_tool(state, "", None)
     state["updated_at"] = now
     state["transcript_path"] = transcript_path
     # Capture the first user prompt as a fallback label
@@ -930,35 +1003,121 @@ def handle_user_prompt_submit(
 
 
 def handle_pre_tool_use(
-    state_file: Path, agent_id: str, tool_use_id: str, now: str
+    session_id: str, agent_id: str, tool_use_id: str, tool_name: str, now: str
 ) -> None:
-    """Tool is about to run — mark as working and track the pending tool."""
-    state = read_state(state_file)
-    if state is None:
+    """Tool is about to run — add it to active tools."""
+    if not tool_use_id:
         return
-    _set_agent_status(state, agent_id, "working")
-    _set_pending_tool(state, agent_id, tool_use_id or None)
-    state["updated_at"] = now
-    write_state(state_file, state)
+    with _agent_lock(session_id, agent_id):
+        fact = read_agent_fact(session_id, agent_id)
+        tools = fact.get("tools", {})
+        entry: JsonDict = {"status": "working"}
+        if tool_name:
+            entry["tool_name"] = tool_name
+        tools[tool_use_id] = entry
+        fact["tools"] = tools
+        fact["status"] = derive_agent_status(fact)
+        fact["updated_at"] = now
+        write_agent_fact(session_id, agent_id, fact)
+
+
+def _find_tool_use_id_in_transcript(
+    transcript_path: str, tool_name: str, tool_input: JsonDict | None
+) -> str | None:
+    """Find tool_use_id by matching tool_name + input in the transcript.
+
+    Reads the last ~16KB and scans for tool_use entries in assistant messages.
+    Returns the matching id, or None.
+    """
+    if not transcript_path or not tool_name:
+        return None
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            read_size = min(size, 16 * 1024)
+            f.seek(size - read_size)
+            data = f.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
+
+    # Build a match key from tool_input (for Bash: the command string)
+    match_cmd = (tool_input or {}).get("command", "") if tool_input else ""
+
+    # Scan lines in reverse for the most recent matching tool_use
+    for line in reversed(data.strip().split("\n")):
+        if '"tool_use"' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+            msg = entry.get("message", {})
+            if not isinstance(msg, dict):
+                continue
+            for block in msg.get("content", []):
+                if not isinstance(block, dict) or block.get("type") != "tool_use":
+                    continue
+                if block.get("name") != tool_name:
+                    continue
+                inp = block.get("input", {})
+                # Match by command for Bash/shell tools, or by full input equality
+                if match_cmd and inp.get("command") == match_cmd:
+                    return block.get("id")
+                if not match_cmd and inp == (tool_input or {}):
+                    return block.get("id")
+        except Exception:
+            continue
+    return None
 
 
 def handle_permission_request(
-    state_file: Path, agent_id: str, now: str, tool_input: JsonDict | None = None
+    state_file: Path,
+    session_id: str,
+    agent_id: str,
+    now: str,
+    tool_use_id: str = "",
+    tool_name: str = "",
+    transcript_path: str = "",
+    tool_input: JsonDict | None = None,
 ) -> None:
+    # Resolve tool_use_id from transcript if not provided by hook
+    if not tool_use_id and transcript_path:
+        tool_use_id = (
+            _find_tool_use_id_in_transcript(transcript_path, tool_name, tool_input)
+            or ""
+        )
+
+    cmd = (tool_input or {}).get("command", "") if tool_input else ""
+    with _agent_lock(session_id, agent_id):
+        fact = read_agent_fact(session_id, agent_id)
+        tools = fact.get("tools", {})
+        tool_entry: JsonDict = {"status": "needs_approval"}
+        if cmd:
+            tool_entry["command"] = cmd
+        if tool_name:
+            tool_entry["tool_name"] = tool_name
+
+        if tool_use_id and tool_use_id in tools:
+            # Exact match — found via hook input or transcript lookup
+            tools[tool_use_id] = tool_entry
+        elif tool_use_id:
+            # tool_use_id from transcript but not yet in tools dict (PreToolUse race)
+            tools[tool_use_id] = tool_entry
+        else:
+            # Last resort: match by tool_name + working status
+            for tid, t in tools.items():
+                if t.get("tool_name") == tool_name and t.get("status") == "working":
+                    tools[tid] = tool_entry
+                    break
+
+        fact["tools"] = tools
+        fact["status"] = derive_agent_status(fact)
+        fact["updated_at"] = now
+        write_agent_fact(session_id, agent_id, fact)
+
+    # Update approval timestamps on session metadata
     state = read_state(state_file)
     if state is None:
         return
-    _set_agent_status(state, agent_id, "needs_approval")
-    # Store the pending command so Swift can match it against running processes
-    cmd = (tool_input or {}).get("command", "") if tool_input else ""
-    if cmd:
-        if agent_id:
-            for sub in state.get("subagents", []):
-                if sub["agent_id"] == agent_id:
-                    sub["pending_tool_command"] = cmd
-                    break
-        else:
-            state["pending_tool_command"] = cmd
     approvals = state.get("approval_timestamps", [])
     approvals.append(now)
     state["approval_timestamps"] = approvals
@@ -967,7 +1126,7 @@ def handle_permission_request(
 
 
 def handle_subagent_start(
-    state_file: Path,
+    session_id: str,
     agent_id: str,
     agent_type: str,
     now: str,
@@ -975,38 +1134,21 @@ def handle_subagent_start(
 ) -> None:
     if not agent_id:
         return
-    state = read_state(state_file)
-    if state is None:
-        return
-    subagents = state.get("subagents", [])
-    if not any(s["agent_id"] == agent_id for s in subagents):
-        entry: JsonDict = {
-            "agent_id": agent_id,
-            "agent_type": agent_type,
-            "started_at": now,
-            "status": "working",
-        }
-        if agent_transcript_path:
-            entry["transcript_path"] = agent_transcript_path
-        subagents.append(entry)
-    state["subagents"] = subagents
-    recompute_session_status(state)
-    state["updated_at"] = now
-    write_state(state_file, state)
+    fact: JsonDict = {
+        "status": "working",
+        "agent_type": agent_type,
+        "started_at": now,
+        "updated_at": now,
+    }
+    if agent_transcript_path:
+        fact["transcript_path"] = agent_transcript_path
+    write_agent_fact(session_id, agent_id, fact)
 
 
-def handle_subagent_stop(state_file: Path, agent_id: str, now: str) -> None:
+def handle_subagent_stop(session_id: str, agent_id: str) -> None:
     if not agent_id:
         return
-    state = read_state(state_file)
-    if state is None:
-        return
-    subagents = state.get("subagents", [])
-    subagents = [s for s in subagents if s["agent_id"] != agent_id]
-    state["subagents"] = subagents
-    recompute_session_status(state)
-    state["updated_at"] = now
-    write_state(state_file, state)
+    delete_agent_fact(session_id, agent_id)
 
 
 if __name__ == "__main__":
