@@ -483,16 +483,9 @@ public class AppState {
     public func focusIDESession(_ session: AgentSession) {
         guard let lock = ideLockInfo(for: session) else { return }
 
-        // Hide Clawdboard so it doesn't overlap the AX click targets.
-        // For the detached floating window we restore it once the operation finishes.
-        NSApp.hide(nil)
-
         // Use workspace folder from lock file, fall back to session cwd.
         let folderPath = lock.workspaceFolders.first ?? session.cwd
-        guard !folderPath.isEmpty else {
-            Self.restoreFloatingWindow()
-            return
-        }
+        guard !folderPath.isEmpty else { return }
 
         let family = Self.ideFamily(for: lock.ideName)
         let command = Self.cliCommand(for: lock.ideName)
@@ -509,6 +502,12 @@ public class AppState {
         let sessionId = session.id
 
         let cwd = session.cwd
+
+        // Hide Clawdboard so it doesn't overlap the AX click targets.
+        // VS Code handles hiding internally — only when clicking is actually needed.
+        if family != .vscode {
+            NSApp.hide(nil)
+        }
 
         if let executablePath = Self.findIDEExecutable(command: command, family: family) {
             Self.runProcess(executablePath, arguments: [targetPath])
@@ -744,8 +743,8 @@ public class AppState {
     /// Flow:
     /// 1. Read the VSCode-generated `aiTitle` from the JSONL transcript
     /// 2. Enable Electron accessibility on the VS Code process
-    /// 3. Find and click the "Session history" button to open the session picker
-    /// 4. Find the session button whose title starts with the aiTitle and click it
+    /// 3. If the session is already active in the frontmost window, return early (no hide)
+    /// 4. Hide Clawdboard, click "Session history", then click the target session
     private func focusVSCodeSession(sessionId: String, cwd: String, ideName: String) {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
             defer { Self.restoreFloatingWindow() }
@@ -763,11 +762,16 @@ public class AppState {
             // Enable Electron accessibility tree (idempotent)
             AccessibilityHelper.enableElectronAccessibility(pid: pid)
 
-            // Check if the current session already matches (avoid opening the picker needlessly)
+            // Check if the current session already matches (avoid opening the picker needlessly).
+            // By this point the `code` CLI has brought the correct window to the front,
+            // so the AX tree of the frontmost window is what we're checking.
             if AccessibilityHelper.findButtonByTitlePrefix(pid: pid, titlePrefix: aiTitle) != nil {
                 debugLog("[VSCode] Session '\(aiTitle)' is already the active session")
                 return
             }
+
+            // Session needs switching — hide Clawdboard so it doesn't intercept clicks.
+            DispatchQueue.main.sync { NSApp.hide(nil) }
 
             // Click "Session history" to open the session picker
             guard let historyBtn = AccessibilityHelper.findButton(pid: pid, description: "Session history")
