@@ -137,8 +137,18 @@ public class AppState {
             rebuildSessions()
             remoteWatcher?.deleteSession(sessionId, on: host)
         } else {
+            let fm = FileManager.default
             let file = sessionsDir.appendingPathComponent("\(sessionId).json")
-            try? FileManager.default.removeItem(at: file)
+            try? fm.removeItem(at: file)
+            // Clean up agent fact files and lock files
+            if let contents = try? fm.contentsOfDirectory(
+                at: sessionsDir, includingPropertiesForKeys: nil)
+            {
+                for url in contents
+                where url.lastPathComponent.hasPrefix("\(sessionId).agent.") {
+                    try? fm.removeItem(at: url)
+                }
+            }
         }
     }
 
@@ -391,39 +401,11 @@ public class AppState {
 
     // MARK: - Session Processing
 
-    /// Apply ghost filtering, debounce, staleness, and abandoned logic to a session.
+    private let sessionProcessor = SessionProcessor()
+
+    /// Process a raw session into a display-ready session via SessionProcessor.
     private func processSession(_ session: AgentSession, now: Date) -> AgentSession? {
-        var s = session
-
-        // Ghost session filter: no model means the session never produced output
-        if s.model == nil {
-            if let started = s.startedAt, let updated = s.updatedAt {
-                let neverUpdated = abs(updated.timeIntervalSince(started)) < 1.0
-                if neverUpdated, now.timeIntervalSince(started) > 30 {
-                    return nil
-                }
-                if now.timeIntervalSince(updated) > 300 {
-                    return nil
-                }
-            }
-            guard let started = s.startedAt, now.timeIntervalSince(started) < 60 else {
-                return nil
-            }
-        }
-
-        if let updatedAt = s.updatedAt {
-            let age = now.timeIntervalSince(updatedAt)
-            if s.status == .pendingWaiting, age >= 1.5 {
-                s.status = .waiting
-            }
-            if s.status == .working, age >= 15.0 {
-                s.status = .waiting
-            }
-            if s.status == .waiting, age >= 600.0 {
-                s.status = .abandoned
-            }
-        }
-        return s
+        sessionProcessor.process(session, now: now)
     }
 
     // MARK: - Computed Properties
@@ -904,12 +886,8 @@ public class AppState {
 // MARK: - Display Status Helper
 
 extension AgentSession {
-    /// The status to show in the UI, accounting for debounce
-    /// (pending_waiting shows as "working" until debounced to "waiting")
+    /// The status to show in the UI.
     public var displayStatus: AgentStatus {
-        switch status {
-        case .pendingWaiting: return .working
-        default: return status
-        }
+        status
     }
 }

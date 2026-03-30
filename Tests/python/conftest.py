@@ -18,12 +18,14 @@ HOOK_PATH = (
 
 
 @pytest.fixture()
-def hook():
-    """Import the hook module (has a hyphen in the filename)."""
+def hook(tmp_sessions):
+    """Import the hook module, patching SESSIONS_DIR to use tmp dir."""
     spec = importlib.util.spec_from_file_location("clawdboard_hook", HOOK_PATH)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    # Redirect agent fact files to temp directory
+    mod.SESSIONS_DIR = tmp_sessions
     return mod
 
 
@@ -38,9 +40,11 @@ def tmp_sessions(tmp_path):
 @pytest.fixture()
 def make_transcript(tmp_path):
     """Factory to create a JSONL transcript file with entries."""
+    _counter = [0]
 
     def _make(entries: list[dict]) -> Path:
-        transcript = tmp_path / "transcript.jsonl"
+        _counter[0] += 1
+        transcript = tmp_path / f"transcript-{_counter[0]}.jsonl"
         lines = [json.dumps(e) for e in entries]
         transcript.write_text("\n".join(lines))
         return transcript
@@ -58,3 +62,5 @@ def make_state(tmp_sessions):
         return state_file
 
     return _make
+
+
