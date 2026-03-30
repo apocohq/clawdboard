@@ -789,24 +789,14 @@ public class AppState {
                 let sessionBtn = AccessibilityHelper.findButtonByTitlePrefix(
                     pid: pid, titlePrefix: aiTitle)
             else {
-                debugLog("[VSCode] Session '\(aiTitle)' not found in picker — pressing Escape")
-                Self.sendEscape()
+                debugLog("[VSCode] Session '\(aiTitle)' not found in picker — closing picker")
+                AccessibilityHelper.click(historyBtn)
                 return
             }
 
             debugLog("[VSCode] Clicking session '\(aiTitle)'")
             AccessibilityHelper.click(sessionBtn)
         }
-    }
-
-    /// Send Escape key via AppleScript. Must be called from a background thread.
-    private static func sendEscape() {
-        runAppleScript(
-            """
-            tell application "System Events"
-                key code 53
-            end tell
-            """)
     }
 
     /// Search standard paths for a CLI executable, returning the first match.
