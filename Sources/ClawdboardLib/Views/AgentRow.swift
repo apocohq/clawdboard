@@ -43,7 +43,7 @@ public struct AgentRow: View {
                 // Tappable content area (opens/focuses session)
                 Button(action: onActivate) {
                     HStack(spacing: 8) {
-                        StatusDot(status: session.displayStatus)
+                        StatusDot(status: session.status)
 
                         VStack(alignment: .leading, spacing: 1) {
                             TruncatingTitle(
@@ -59,7 +59,7 @@ public struct AgentRow: View {
                                     Text(host)
                                     Text("·")
                                 }
-                                Text(session.displayStatus.displayLabel)
+                                Text(session.status.displayLabel)
                                     .frame(width: 56, alignment: .leading)
                                 if session.isHookTracked {
                                     if let branch = session.gitBranch {

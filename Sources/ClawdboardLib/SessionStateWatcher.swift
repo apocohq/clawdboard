@@ -1,13 +1,12 @@
 import Foundation
 
-/// Watches ~/.clawdboard/sessions/ for state file changes written by Claude hooks.
-/// Uses DispatchSource file system monitoring for instant detection.
-/// A separate low-frequency timer handles PID liveness cleanup for crashed sessions.
+/// Watches ~/.clawdboard/sessions/ for state file changes written by Claude hooks
+/// and the Python watcher daemon. Uses DispatchSource file system monitoring for
+/// instant detection. PID liveness cleanup is handled by the watcher daemon.
 public class SessionStateWatcher {
     private let sessionsDir: URL
     private var fileDescriptor: Int32 = -1
     private var dispatchSource: DispatchSourceFileSystemObject?
-    private var cleanupTimer: DispatchSourceTimer?
     private let onChange: ([AgentSession]) -> Void
     private let ioQueue = DispatchQueue(label: "clawdboard.session-watcher", qos: .utility)
 
@@ -41,7 +40,6 @@ public class SessionStateWatcher {
                 queue: ioQueue
             )
             source.setEventHandler { [weak self] in
-                debugLog("[SessionWatcher] DispatchSource fired")
                 self?.notifyChanges()
             }
             source.setCancelHandler { [weak self] in
@@ -52,24 +50,10 @@ public class SessionStateWatcher {
             source.resume()
             dispatchSource = source
         }
-
-        // Short poll timer as backup for coalesced DispatchSource events.
-        // DispatchSource may coalesce rapid writes (e.g. PreToolUse + Stop in quick succession),
-        // so this ensures updates are picked up within a few seconds.
-        // Also handles PID liveness cleanup for crashed sessions.
-        let timer = DispatchSource.makeTimerSource(queue: ioQueue)
-        timer.schedule(deadline: .now() + 3.0, repeating: 3.0)
-        timer.setEventHandler { [weak self] in
-            self?.notifyChanges()
-        }
-        timer.resume()
-        cleanupTimer = timer
     }
 
     /// Stop watching
     public func stop() {
-        cleanupTimer?.cancel()
-        cleanupTimer = nil
         dispatchSource?.cancel()
         dispatchSource = nil
     }
@@ -80,15 +64,17 @@ public class SessionStateWatcher {
         let sessions = readAllSessions()
         let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
         if elapsed > 50 {
-            debugLog("[SessionWatcher] notifyChanges took \(Int(elapsed))ms (\(sessions.count) sessions)")
+            debugLog(
+                "[SessionWatcher] notifyChanges took \(Int(elapsed))ms (\(sessions.count) sessions)"
+            )
         }
         DispatchQueue.main.async { [weak self] in
             self?.onChange(sessions)
         }
     }
 
-    /// Read all .json state files from the sessions directory.
-    /// Removes state files for processes that are no longer running.
+    /// Read all session state files from the sessions directory.
+    /// Each session is a single {uuid}.json file containing all state including active_tools.
     public func readAllSessions() -> [AgentSession] {
         let fm = FileManager.default
         guard
@@ -101,28 +87,17 @@ public class SessionStateWatcher {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        return files.compactMap { url -> AgentSession? in
-            guard url.pathExtension == "json" else { return nil }
+        // Only read session JSON files — skip .lock, .tmp, and legacy .agent. files
+        let sessionFiles = files.filter { url in
+            let name = url.lastPathComponent
+            return url.pathExtension == "json"
+                && !name.contains(".agent.")
+                && !name.contains(".tmp.")
+        }
+
+        return sessionFiles.compactMap { url -> AgentSession? in
             guard let data = try? Data(contentsOf: url) else { return nil }
-            guard let session = try? decoder.decode(AgentSession.self, from: data) else {
-                return nil
-            }
-
-            // Check if the Claude Code process is still alive
-            if let pid = session.pid {
-                if kill(pid_t(pid), 0) != 0 {
-                    try? fm.removeItem(at: url)
-                    return nil
-                }
-            } else if let updatedAt = session.updatedAt,
-                Date().timeIntervalSince(updatedAt) > 120
-            {
-                // No PID (legacy state file) and stale for 2+ minutes — remove
-                try? fm.removeItem(at: url)
-                return nil
-            }
-
-            return session
+            return try? decoder.decode(AgentSession.self, from: data)
         }
     }
 
