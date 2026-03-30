@@ -370,12 +370,12 @@ struct TruncatingTitle: View {
                     showPopover = false
                 }
             }
-            .onChange(of: isTruncated) { newValue in
-                if !newValue {
+            .onChange(of: isTruncated) {
+                if !isTruncated {
                     dismissPopover()
                 }
             }
-            .onChange(of: text) { _ in
+            .onChange(of: text) {
                 dismissPopover()
             }
             .onDisappear {
