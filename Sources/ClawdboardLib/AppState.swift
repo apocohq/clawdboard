@@ -481,6 +481,7 @@ public class AppState {
         // Capture for JetBrains terminal tab focus via AX
         let tabTitle = session.terminalTabTitle
         let ideName = lock.ideName
+        let idePid = lock.pid
         let sessionId = session.id
 
         let cwd = session.cwd
@@ -494,10 +495,11 @@ public class AppState {
         if let executablePath = Self.findIDEExecutable(command: command, family: family) {
             Self.runProcess(executablePath, arguments: [targetPath])
             if family == .vscode {
-                focusVSCodeSession(sessionId: sessionId, cwd: cwd, ideName: ideName)
+                focusVSCodeSession(sessionId: sessionId, cwd: cwd, pid: idePid, ideName: ideName)
             } else if family == .jetbrains {
                 if let tabTitle = tabTitle {
-                    focusJetBrainsTerminalTab(sessionId: sessionId, ideName: ideName, tabTitle: tabTitle)
+                    focusJetBrainsTerminalTab(
+                        sessionId: sessionId, pid: idePid, ideName: ideName, tabTitle: tabTitle)
                 } else {
                     Self.activateJetBrainsTerminal()
                 }
@@ -513,7 +515,7 @@ public class AppState {
                 if status == 0 {
                     if let tabTitle = tabTitle {
                         self.focusJetBrainsTerminalTab(
-                            sessionId: sessionId, ideName: ideName, tabTitle: tabTitle)
+                            sessionId: sessionId, pid: idePid, ideName: ideName, tabTitle: tabTitle)
                     } else {
                         Self.activateJetBrainsTerminal()
                     }
@@ -598,22 +600,38 @@ public class AppState {
             """)
     }
 
-    /// Find a running IDE application by its display name.
-    private static func findIDEApp(ideName: String) -> NSRunningApplication? {
+    /// Find a running IDE application by PID, falling back to name-based search.
+    /// PID lookup is exact but may fail if the IDE was restarted since the lock file
+    /// was written. Name-based search is a best-effort fallback.
+    private static func findIDEApp(pid: Int, ideName: String) -> NSRunningApplication? {
         let lower = ideName.lowercased()
-        return NSWorkspace.shared.runningApplications.first { app in
-            guard app.activationPolicy == .regular else { return false }
-            if let name = app.localizedName?.lowercased() {
-                return name.contains(lower) || lower.contains(name)
-            }
-            return false
+        let nameMatches: (NSRunningApplication) -> Bool = { app in
+            guard app.activationPolicy == .regular,
+                let name = app.localizedName?.lowercased()
+            else { return false }
+            return name.contains(lower) || lower.contains(name)
         }
+
+        // Try exact PID lookup first.
+        if let app = NSRunningApplication(processIdentifier: pid_t(pid)),
+            !app.isTerminated
+        {
+            if nameMatches(app) { return app }
+            debugLog(
+                "[IDE] PID \(pid) running but doesn't match '\(ideName)' — falling back to name search"
+            )
+        }
+
+        // Fallback: search all running apps by name.
+        return NSWorkspace.shared.runningApplications.first(where: nameMatches)
     }
 
     /// Find and click the terminal tab matching the session's title.
     /// If the Terminal tool window is closed (tab not found), sends ⌥F12 to open it and retries.
     /// Tracks the found element for rename detection via `terminalTabPoller`.
-    private func focusJetBrainsTerminalTab(sessionId: String, ideName: String, tabTitle: String) {
+    private func focusJetBrainsTerminalTab(
+        sessionId: String, pid: Int, ideName: String, tabTitle: String
+    ) {
         // Strip the status emoji prefix (e.g. "🔵 general-chat" → "general-chat")
         // so the AX search matches regardless of which status dot is currently showing.
         let searchTitle: String
@@ -626,17 +644,17 @@ public class AppState {
         let poller = self.terminalTabPoller
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
             defer { Self.restoreFloatingWindow() }
-            guard let app = Self.findIDEApp(ideName: ideName) else {
+            guard let app = Self.findIDEApp(pid: pid, ideName: ideName) else {
                 debugLog("[JB] Could not find running IDE for '\(ideName)'")
                 return
             }
-            let pid = app.processIdentifier
+            let appPid = app.processIdentifier
             app.activate()
             Thread.sleep(forTimeInterval: 0.1)
 
-            debugLog("[JB] Searching AX tree for tab '\(searchTitle)' in pid=\(pid)")
+            debugLog("[JB] Searching AX tree for tab '\(searchTitle)' in pid=\(appPid)")
             var result = AccessibilityHelper.findAndActivateElement(
-                pid: pid,
+                pid: appPid,
                 titleContaining: searchTitle,
                 maxDepth: 15
             )
@@ -646,7 +664,7 @@ public class AppState {
                 Self.sendOptionF12()
                 Thread.sleep(forTimeInterval: 0.2)
                 result = AccessibilityHelper.findAndActivateElement(
-                    pid: pid,
+                    pid: appPid,
                     titleContaining: searchTitle,
                     maxDepth: 15
                 )
@@ -727,7 +745,7 @@ public class AppState {
     /// 2. Enable Electron accessibility on the VS Code process
     /// 3. If the session is already active in the frontmost window, return early (no hide)
     /// 4. Hide Clawdboard, click "Session history", then click the target session
-    private func focusVSCodeSession(sessionId: String, cwd: String, ideName: String) {
+    private func focusVSCodeSession(sessionId: String, cwd: String, pid: Int, ideName: String) {
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
             defer { Self.restoreFloatingWindow() }
             guard let aiTitle = Self.readAITitle(cwd: cwd, sessionId: sessionId) else {
@@ -735,7 +753,7 @@ public class AppState {
                 return
             }
 
-            guard let app = Self.findIDEApp(ideName: ideName) else {
+            guard let app = Self.findIDEApp(pid: pid, ideName: ideName) else {
                 debugLog("[VSCode] Could not find running IDE for '\(ideName)'")
                 return
             }
