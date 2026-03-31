@@ -1,35 +1,72 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Terminal body -->
-  <rect x="0" y="0" width="1024" height="1024" rx="0" fill="#2d2d44"/>
-  <rect x="0" y="0" width="1024" height="184" rx="0" fill="#3d3d5c"/>
-  <rect x="0" y="128" width="1024" height="82" fill="#3d3d5c"/>
-  <!-- Window buttons -->
-  <circle cx="112" cy="92" r="28" fill="#ff5f57"/>
-  <circle cx="192" cy="92" r="28" fill="#febc2e"/>
-  <circle cx="272" cy="92" r="28" fill="#28c840"/>
-  <!-- Screen -->
-  <rect x="48" y="224" width="928" height="752" rx="32" fill="#1a1a2e"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 166.1 167.51">
+  <!-- Generator: Adobe Illustrator 30.3.0, SVG Export Plug-In . SVG Version: 2.1.3 Build 182)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: url(#linear-gradient2);
+      }
 
-  <!-- Claude character centered in screen -->
-  <!-- Body -->
-  <rect x="268" y="336" width="488" height="340" rx="40" fill="#E8A88C"/>
-  <!-- Face area -->
-  <rect x="300" y="368" width="424" height="276" rx="20" fill="#F0BCA8"/>
-  <!-- Eyes -->
-  <rect x="348" y="420" width="72" height="72" rx="12" fill="#2d2d44"/>
-  <rect x="604" y="420" width="72" height="72" rx="12" fill="#2d2d44"/>
-  <!-- Nose -->
-  <rect x="484" y="528" width="56" height="40" rx="12" fill="#D4947A"/>
-  <!-- Ears -->
-  <rect x="280" y="296" width="80" height="80" rx="20" fill="#E8A88C"/>
-  <rect x="664" y="296" width="80" height="80" rx="20" fill="#E8A88C"/>
-  <!-- Legs -->
-  <rect x="332" y="676" width="88" height="120" rx="20" fill="#E8A88C"/>
-  <rect x="604" y="676" width="88" height="120" rx="20" fill="#E8A88C"/>
-  <!-- Feet -->
-  <rect x="316" y="760" width="120" height="56" rx="20" fill="#E8A88C"/>
-  <rect x="588" y="760" width="120" height="56" rx="20" fill="#E8A88C"/>
-  <!-- Arms -->
-  <rect x="156" y="432" width="120" height="88" rx="32" fill="#E8A88C"/>
-  <rect x="748" y="432" width="120" height="88" rx="32" fill="#E8A88C"/>
+      .st1 {
+        fill: url(#linear-gradient1);
+      }
+
+      .st2 {
+        fill: url(#linear-gradient3);
+      }
+
+      .st3 {
+        fill: url(#linear-gradient);
+      }
+
+      .st4 {
+        fill: #1e1e34;
+      }
+
+      .st5 {
+        fill: #b22424;
+      }
+
+      .st6 {
+        fill: #c06a3a;
+      }
+
+      .st7 {
+        fill: #4ade80;
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="-1970.93" y1="146.44" x2="-1970.93" y2="146.65" gradientTransform="translate(157715 -17431) scale(80 120)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8956a"/>
+      <stop offset="1" stop-color="#d47748"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient1" x1="-1972.94" y1="146.44" x2="-1972.94" y2="146.65" gradientTransform="translate(157919 -17431) scale(80 120)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8956a"/>
+      <stop offset="1" stop-color="#d47748"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient2" x1="-1974.95" y1="146.44" x2="-1974.95" y2="146.65" gradientTransform="translate(158123 -17431) scale(80 120)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8956a"/>
+      <stop offset="1" stop-color="#d47748"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient3" x1="83.05" y1="116" x2="83.05" y2="-36.53" gradientTransform="translate(0 116) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8956a"/>
+      <stop offset="1" stop-color="#d47748"/>
+    </linearGradient>
+  </defs>
+  <path class="st3" d="M39.15,142.09h2.54c1.99,0,3.79.81,5.09,2.11s2.11,3.1,2.11,5.09v11.02c0,1.99-.81,3.79-2.11,5.09s-3.1,2.11-5.09,2.11h-2.54c-1.99,0-3.79-.81-5.09-2.11s-2.11-3.1-2.11-5.09v-11.02c0-1.99.81-3.79,2.11-5.09s3.1-2.11,5.09-2.11Z"/>
+  <path class="st1" d="M82.37,142.09h2.54c1.99,0,3.79.81,5.09,2.11s2.11,3.1,2.11,5.09v11.02c0,1.99-.81,3.79-2.11,5.09s-3.1,2.11-5.09,2.11h-2.54c-1.99,0-3.79-.81-5.09-2.11s-2.11-3.1-2.11-5.09v-11.02c0-1.99.81-3.79,2.11-5.09s3.1-2.11,5.09-2.11Z"/>
+  <path class="st0" d="M125.59,142.09h2.54c1.99,0,3.79.81,5.09,2.11s2.11,3.1,2.11,5.09v11.02c0,1.99-.81,3.79-2.11,5.09s-3.1,2.11-5.09,2.11h-2.54c-1.99,0-3.79-.81-5.09-2.11s-2.11-3.1-2.11-5.09v-11.02c0-1.99.81-3.79,2.11-5.09s3.1-2.11,5.09-2.11h0Z"/>
+  <path class="st2" d="M34.6,0h96.91c9.55,0,18.2,3.87,24.46,10.13,6.26,6.26,10.13,14.91,10.13,24.46v83.35c0,9.55-3.87,18.2-10.13,24.46s-14.91,10.13-24.46,10.13H34.6c-9.55,0-18.2-3.87-24.46-10.13S0,127.5,0,117.94V34.6c0-9.55,3.87-18.2,10.13-24.46C16.39,3.88,25.04,0,34.6,0Z"/>
+  <g>
+    <path class="st4" d="M22.26,40.4h18.52c3.18,0,6.05,1.29,8.13,3.37s3.37,4.96,3.37,8.13v21.48c0,3.18-1.29,6.05-3.37,8.13s-4.96,3.37-8.13,3.37h-18.52c-3.18,0-6.05-1.29-8.13-3.37s-3.37-4.96-3.37-8.13v-21.48c0-3.18,1.29-6.05,3.37-8.13,2.08-2.08,4.96-3.37,8.13-3.37Z"/>
+    <path class="st7" d="M27.03,51.71h8.99c1.95,0,3.72.79,5,2.07s2.07,3.05,2.07,5v8.99c0,1.95-.79,3.72-2.07,5s-3.05,2.07-5,2.07h-8.99c-1.95,0-3.72-.79-5-2.07s-2.07-3.05-2.07-5v-8.99c0-1.95.79-3.72,2.07-5s3.05-2.07,5-2.07Z"/>
+  </g>
+  <g>
+    <path class="st4" d="M73.79,40.4h18.52c3.18,0,6.05,1.29,8.13,3.37s3.37,4.96,3.37,8.13v21.48c0,3.18-1.29,6.05-3.37,8.13s-4.96,3.37-8.13,3.37h-18.52c-3.18,0-6.05-1.29-8.13-3.37s-3.37-4.96-3.37-8.13v-21.48c0-3.18,1.29-6.05,3.37-8.13,2.08-2.08,4.96-3.37,8.13-3.37Z"/>
+    <path class="st7" d="M78.55,51.71h8.99c1.95,0,3.72.79,5,2.07s2.07,3.05,2.07,5v8.99c0,1.95-.79,3.72-2.07,5s-3.05,2.07-5,2.07h-8.99c-1.95,0-3.72-.79-5-2.07s-2.07-3.05-2.07-5v-8.99c0-1.95.79-3.72,2.07-5s3.05-2.07,5-2.07Z"/>
+  </g>
+  <g>
+    <path class="st4" d="M125.32,41.03h18.52c3.18,0,6.05,1.29,8.13,3.37s3.37,4.96,3.37,8.13v21.48c0,3.18-1.29,6.05-3.37,8.13s-4.96,3.37-8.13,3.37h-18.52c-3.18,0-6.05-1.29-8.13-3.37s-3.37-4.96-3.37-8.13v-21.48c0-3.18,1.29-6.05,3.37-8.13s4.96-3.37,8.13-3.37Z"/>
+    <path class="st5" d="M130.08,52.35h8.99c1.95,0,3.72.79,5,2.07s2.07,3.05,2.07,5v8.99c0,1.95-.79,3.72-2.07,5s-3.05,2.07-5,2.07h-8.99c-1.95,0-3.72-.79-5-2.07s-2.07-3.05-2.07-5v-8.99c0-1.95.79-3.72,2.07-5s3.05-2.07,5-2.07Z"/>
+  </g>
+  <rect class="st6" x="56.61" y="107.66" width="52.86" height="18.57" rx="9.28" ry="9.28"/>
 </svg>
