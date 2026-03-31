@@ -167,8 +167,10 @@ private struct WindowConfigurator: NSViewRepresentable {
             findView(in: window, matching: "ToolbarTitleView")?.animator().alphaValue =
                 hovering ? 1.0 : 0.3
 
-            // Toolbar item viewer (menu button)
-            findView(in: window, matching: "ToolbarItemViewer")?.animator().alphaValue = alpha
+            // Toolbar item viewers (refresh + menu button)
+            for view in findAllViews(in: window, matching: "ToolbarItemViewer") {
+                view.animator().alphaValue = alpha
+            }
         }
     }
 
@@ -209,16 +211,23 @@ private struct WindowConfigurator: NSViewRepresentable {
 
     /// Recursively find a view whose class name contains the given string.
     private static func findView(in window: NSWindow, matching className: String) -> NSView? {
+        findAllViews(in: window, matching: className).first
+    }
+
+    /// Recursively find all views whose class name contains the given string.
+    private static func findAllViews(in window: NSWindow, matching className: String) -> [NSView] {
         guard let root = window.standardWindowButton(.closeButton)?.superview?.superview
-        else { return nil }
-        func search(_ view: NSView) -> NSView? {
-            if String(describing: type(of: view)).contains(className) { return view }
-            for sub in view.subviews {
-                if let found = search(sub) { return found }
+        else { return [] }
+        var results: [NSView] = []
+        func search(_ view: NSView) {
+            if String(describing: type(of: view)).contains(className) {
+                results.append(view)
+                return
             }
-            return nil
+            for sub in view.subviews { search(sub) }
         }
-        return search(root)
+        search(root)
+        return results
     }
 
     final class Coordinator: NSObject {

@@ -16,21 +16,21 @@ public struct DetachedPanelView: View {
         .frame(width: 420)
         .frame(maxHeight: .infinity, alignment: .top)
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    appState.refreshUsageLimits()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help(
-                    appState.usageLimits.map {
-                        "Usage updated \(PanelView.updatedText($0.updatedAt))"
-                    }
-                        ?? "Refresh usage data"
-                )
-            }
             ToolbarItem(placement: .primaryAction) {
-                settingsMenu
+                HStack(spacing: 2) {
+                    Button {
+                        appState.refreshUsageLimits()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .help(
+                        appState.usageLimits.map {
+                            "Usage updated \(PanelView.updatedText($0.updatedAt))"
+                        }
+                            ?? "Refresh usage data"
+                    )
+                    settingsMenu
+                }
             }
         }
     }
