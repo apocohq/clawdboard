@@ -350,8 +350,8 @@ struct MenuBarLabel: View {
                 let img = Self.renderRingOnly(pct: pct)
             {
                 Image(nsImage: img)
-            } else {
-                Image(systemName: "apple.terminal")
+            } else if let icon = Self.menuBarIcon {
+                Image(nsImage: icon)
             }
         } else if let image = Self.renderDotsImage(
             approval: approval, waiting: waiting, working: working,
@@ -410,6 +410,24 @@ struct MenuBarLabel: View {
         rep.size = size
         return (rep, size)
     }
+
+    /// Menu bar icon rendered from the bundled SVG, used as a template image.
+    private static let menuBarIcon: NSImage? = {
+        let svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.31 16.35">
+              <path fill="#fff" d="M14,.4H3.4C1.57.4.09,1.89.09,3.71v6.62c0,1.83,1.48,3.31,3.31,3.31v1.31c0,.36.3.66.66.66h.66c.36,0,.66-.3.66-.66v-1.31h2.1v1.31c0,.36.3.66.66.66h.66c.36,0,.66-.3.66-.66v-1.31h2.1v1.31c0,.36.3.66.66.66h.66c.36,0,.66-.3.66-.66v-1.31h.43c1.83,0,3.31-1.48,3.31-3.31V3.71c0-1.83-1.48-3.31-3.31-3.31ZM5.39,7.36c0,.55-.44.99-.99.99h-1.99c-.55,0-.99-.44-.99-.99v-1.99c0-.55.44-.99.99-.99h1.99c.55,0,.99.44.99.99v1.99ZM10.68,7.36c0,.55-.44.99-.99.99h-1.99c-.55,0-.99-.44-.99-.99v-1.99c0-.55.44-.99.99-.99h1.99c.55,0,.99.44.99.99v1.99ZM15.98,7.36c0,.55-.44.99-.99.99h-1.99c-.55,0-.99-.44-.99-.99v-1.99c0-.55.44-.99.99-.99h1.99c.55,0,.99.44.99.99v1.99Z"/>
+              <rect fill="#fff" x="2.57" y="5.54" width="1.65" height="1.65" rx=".55" ry=".55"/>
+              <rect fill="#fff" x="7.87" y="5.54" width="1.65" height="1.65" rx=".55" ry=".55"/>
+              <rect fill="#fff" x="13.17" y="5.54" width="1.65" height="1.65" rx=".46" ry=".46"/>
+            </svg>
+            """
+        guard let data = svg.data(using: .utf8),
+            let image = NSImage(data: data)
+        else { return nil }
+        image.isTemplate = true
+        image.size = NSSize(width: 18, height: 17)
+        return image
+    }()
 
     /// Render a standalone usage ring for idle state. Always template.
     private static func renderRingOnly(pct: CGFloat) -> NSImage? {
