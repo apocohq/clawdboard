@@ -39,6 +39,7 @@
     }
   },
   "enabledPlugins": {
-    "clawdboard@apoco-plugins": true
+    "clawdboard@apoco-plugins": true,
+    "practical-skills@apoco-plugins": true
   }
 }
